@@ -33,6 +33,18 @@ TEST(ApiResponseTest, MapsReadinessFailure) {
     EXPECT_EQ(httpStatus(ErrorCode::StorageIoError), 500);
 }
 
+TEST(ApiResponseTest, MapsDeviceAuthenticationFailures) {
+    EXPECT_STREQ(errorCodeName(ErrorCode::AuthRequired), "AUTH_REQUIRED");
+    EXPECT_STREQ(errorCodeName(ErrorCode::SignatureInvalid), "SIGNATURE_INVALID");
+    EXPECT_STREQ(errorCodeName(ErrorCode::RequestReplayed), "REQUEST_REPLAYED");
+    EXPECT_STREQ(errorCodeName(ErrorCode::DeviceDisabled), "DEVICE_DISABLED");
+    EXPECT_STREQ(errorCodeName(ErrorCode::DeviceNotFound), "DEVICE_NOT_FOUND");
+    EXPECT_EQ(httpStatus(ErrorCode::AuthRequired), 401);
+    EXPECT_EQ(httpStatus(ErrorCode::RequestReplayed), 409);
+    EXPECT_EQ(httpStatus(ErrorCode::DeviceDisabled), 403);
+    EXPECT_EQ(httpStatus(ErrorCode::DeviceNotFound), 404);
+}
+
 TEST(ApiResponseTest, GeneratesDistinctServerRequestIds) {
     const std::string first = generateRequestId();
     const std::string second = generateRequestId();

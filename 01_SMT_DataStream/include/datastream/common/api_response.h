@@ -16,14 +16,21 @@ class HttpResp;
 namespace smt {
 namespace datastream {
 
-/// @brief 第一阶段使用的稳定业务错误码。
+/// @brief HTTP 接口使用的稳定业务错误码。
 enum class ErrorCode {
-    Ok = 0,            ///< 请求成功。
-    InvalidArgument,   ///< 外部参数不符合契约。
-    ServiceNotReady,   ///< 必要依赖或目录尚未就绪。
-    MySqlUnavailable,  ///< MySQL 当前不可用。
-    RedisUnavailable,  ///< Redis 当前不可用。
-    StorageIoError     ///< 文件系统操作失败。
+    Ok = 0,                ///< 请求成功。
+    InvalidArgument,       ///< 外部参数不符合契约。
+    AuthRequired,          ///< 缺少认证信息。
+    SignatureInvalid,      ///< 摘要或签名不正确。
+    TimestampExpired,      ///< 设备请求时间超出允许窗口。
+    RequestReplayed,       ///< 请求标识已在防重放窗口中使用。
+    DeviceDisabled,        ///< 设备、工位或产线已停用。
+    DeviceNotFound,        ///< 设备未登记。
+    OperatorTokenInvalid,  ///< 运维令牌不正确。
+    ServiceNotReady,       ///< 必要依赖或目录尚未就绪。
+    MySqlUnavailable,      ///< MySQL 当前不可用。
+    RedisUnavailable,      ///< Redis 当前不可用。
+    StorageIoError         ///< 文件系统操作失败。
 };
 
 /// @brief 返回业务错误码的稳定字符串。

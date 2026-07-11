@@ -16,9 +16,15 @@ DataStreamServer::DataStreamServer(const AppConfig& config)
       storage_(config.upload.temp_root, config.upload.archive_root),
       mysql_(config.mysql),
       redis_(config.redis),
+      device_repository_(mysql_, config.health.check_timeout_ms),
+      device_authenticator_(device_repository_, redis_, config.auth, config.redis,
+                            config.health.check_timeout_ms),
+      operator_authenticator_(config.operator_auth.bearer_token),
       health_controller_(mysql_, redis_, storage_, config.health.check_timeout_ms),
+      heartbeat_controller_(device_authenticator_, device_repository_, redis_, config),
       started_(false) {
     health_controller_.registerRoutes(http_server_);
+    heartbeat_controller_.registerRoutes(http_server_);
 }
 
 void DataStreamServer::initialize() {

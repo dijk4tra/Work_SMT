@@ -18,6 +18,20 @@ const char* errorCodeName(ErrorCode code) {
             return "OK";
         case ErrorCode::InvalidArgument:
             return "INVALID_ARGUMENT";
+        case ErrorCode::AuthRequired:
+            return "AUTH_REQUIRED";
+        case ErrorCode::SignatureInvalid:
+            return "SIGNATURE_INVALID";
+        case ErrorCode::TimestampExpired:
+            return "TIMESTAMP_EXPIRED";
+        case ErrorCode::RequestReplayed:
+            return "REQUEST_REPLAYED";
+        case ErrorCode::DeviceDisabled:
+            return "DEVICE_DISABLED";
+        case ErrorCode::DeviceNotFound:
+            return "DEVICE_NOT_FOUND";
+        case ErrorCode::OperatorTokenInvalid:
+            return "OPERATOR_TOKEN_INVALID";
         case ErrorCode::ServiceNotReady:
             return "SERVICE_NOT_READY";
         case ErrorCode::MySqlUnavailable:
@@ -36,6 +50,17 @@ int httpStatus(ErrorCode code) {
             return 200;
         case ErrorCode::InvalidArgument:
             return 400;
+        case ErrorCode::AuthRequired:
+        case ErrorCode::SignatureInvalid:
+        case ErrorCode::TimestampExpired:
+        case ErrorCode::OperatorTokenInvalid:
+            return 401;
+        case ErrorCode::DeviceDisabled:
+            return 403;
+        case ErrorCode::DeviceNotFound:
+            return 404;
+        case ErrorCode::RequestReplayed:
+            return 409;
         case ErrorCode::StorageIoError:
             return 500;
         case ErrorCode::ServiceNotReady:

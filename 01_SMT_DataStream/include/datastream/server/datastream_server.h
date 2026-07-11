@@ -1,6 +1,6 @@
 /**
  * @file datastream_server.h
- * @brief 定义数据采集服务第一阶段生命周期。
+ * @brief 定义数据采集服务生命周期和业务组件组合关系。
  */
 
 #ifndef DATASTREAM_SERVER_DATASTREAM_SERVER_H_
@@ -9,7 +9,11 @@
 #include <wfrest/HttpServer.h>
 
 #include "datastream/api/health_controller.h"
+#include "datastream/api/heartbeat_controller.h"
+#include "datastream/auth/device_authenticator.h"
+#include "datastream/auth/operator_authenticator.h"
 #include "datastream/config/app_config.h"
+#include "datastream/device/device_repository.h"
 #include "datastream/storage/mysql_client.h"
 #include "datastream/storage/redis_client.h"
 #include "datastream/storage/storage_paths.h"
@@ -42,7 +46,11 @@ class DataStreamServer {
     MySqlClient mysql_;
     RedisClient redis_;
     wfrest::HttpServer http_server_;
+    DeviceRepository device_repository_;
+    DeviceAuthenticator device_authenticator_;
+    OperatorAuthenticator operator_authenticator_;
     HealthController health_controller_;
+    HeartbeatController heartbeat_controller_;
     bool started_;
 };
 

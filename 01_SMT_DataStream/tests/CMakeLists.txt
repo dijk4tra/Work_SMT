@@ -4,7 +4,11 @@ add_executable(
     datastream_unit_tests
     unit/app_config_test.cpp
     unit/api_response_test.cpp
+    unit/crypto_test.cpp
+    unit/heartbeat_test.cpp
+    unit/operator_authenticator_test.cpp
     unit/storage_paths_test.cpp
+    unit/time_utils_test.cpp
     unit/uri_utils_test.cpp
 )
 target_link_libraries(datastream_unit_tests PRIVATE datastream_core GTest::gtest_main)
@@ -16,6 +20,7 @@ target_compile_definitions(
 gtest_discover_tests(datastream_unit_tests DISCOVERY_MODE PRE_TEST)
 
 if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_executable(datastream_integration_tests integration/clients_test.cpp)
     target_link_libraries(datastream_integration_tests PRIVATE datastream_core GTest::gtest_main)
     target_compile_options(datastream_integration_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -28,4 +33,12 @@ if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
         DISCOVERY_MODE PRE_TEST
         PROPERTIES LABELS integration
     )
+
+    add_test(
+        NAME HeartbeatE2ETest
+        COMMAND
+            ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/e2e/heartbeat_e2e_test.py
+            $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
+    )
+    set_tests_properties(HeartbeatE2ETest PROPERTIES LABELS integration TIMEOUT 30)
 endif()
