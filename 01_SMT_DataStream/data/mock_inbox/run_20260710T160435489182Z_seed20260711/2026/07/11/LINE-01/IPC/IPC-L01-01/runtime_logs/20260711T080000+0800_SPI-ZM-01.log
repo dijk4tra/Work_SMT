@@ -1,0 +1,1 @@
+2026-07-11T08:00:00.000+08:00 level=INFO module=collector ipc=IPC-L01-01 source_device=SPI-ZM-01 event=file_detected file=20260711T080000+0800_CTRLMBA1-260711-000000_spi.json request_id=66edf5505b34d6d279e4b72c759c11dc queue_depth=4

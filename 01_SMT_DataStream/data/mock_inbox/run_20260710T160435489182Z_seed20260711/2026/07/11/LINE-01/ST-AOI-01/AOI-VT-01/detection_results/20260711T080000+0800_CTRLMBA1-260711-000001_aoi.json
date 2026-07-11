@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "record_type": "aoi_inspection_result",
+  "result_id": "AOI-CTRLMBA1-260711-000001",
+  "line_id": "LINE-01",
+  "station_id": "ST-AOI-01",
+  "station_type": "AOI",
+  "device_id": "AOI-VT-01",
+  "device_model": "VT-S730",
+  "collector_id": "IPC-L01-01",
+  "software_version": "5.4.7",
+  "work_order": "WO-20260711-001",
+  "product_model": "CTRL-MB-A1",
+  "product_sn": "CTRLMBA1-260711-000001",
+  "panel_sn": "PNL-260711-00000",
+  "recipe_name": "CTRL-MB-A1_AOI_R03",
+  "inspected_at": "2026-07-11T08:00:00.000+08:00",
+  "result": "PASS",
+  "cycle_time_ms": 1722,
+  "component_count": 386,
+  "defect_count": 0,
+  "defects": []
+}

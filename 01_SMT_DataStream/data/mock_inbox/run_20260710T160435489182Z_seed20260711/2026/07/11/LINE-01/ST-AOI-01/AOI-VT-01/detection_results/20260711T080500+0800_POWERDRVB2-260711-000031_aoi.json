@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "record_type": "aoi_inspection_result",
+  "result_id": "AOI-POWERDRVB2-260711-000031",
+  "line_id": "LINE-01",
+  "station_id": "ST-AOI-01",
+  "station_type": "AOI",
+  "device_id": "AOI-VT-01",
+  "device_model": "VT-S730",
+  "collector_id": "IPC-L01-01",
+  "software_version": "5.4.7",
+  "work_order": "WO-20260711-001",
+  "product_model": "POWER-DRV-B2",
+  "product_sn": "POWERDRVB2-260711-000031",
+  "panel_sn": "PNL-260711-00007",
+  "recipe_name": "POWER-DRV-B2_AOI_R03",
+  "inspected_at": "2026-07-11T08:05:00.000+08:00",
+  "result": "NG",
+  "cycle_time_ms": 1359,
+  "component_count": 386,
+  "defect_count": 1,
+  "defects": [
+    {
+      "defect_code": "POLARITY_REVERSED",
+      "defect_name": "极性反",
+      "reference": "C27",
+      "x_mm": 97.645,
+      "y_mm": 24.233,
+      "confidence": 0.9948,
+      "image_file": "POWERDRVB2-260711-000031_C27_POLARITY_REVERSED.png"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+/build/
+/logs/*
+!/logs/.gitkeep
+/data/upload_tmp/
+/data/archive/
+__pycache__/
+*.py[cod]
+*.swp
+*.tmp
+.env
+*.env.local
