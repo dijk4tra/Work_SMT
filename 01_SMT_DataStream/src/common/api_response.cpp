@@ -1,0 +1,65 @@
+/**
+ * @file api_response.cpp
+ * @brief 实现统一业务码映射和 JSON 响应输出。
+ */
+
+#include "datastream/common/api_response.h"
+
+#include <wfrest/HttpMsg.h>
+
+#include <stdexcept>
+
+namespace smt {
+namespace datastream {
+
+const char* errorCodeName(ErrorCode code) {
+    switch (code) {
+        case ErrorCode::Ok:
+            return "OK";
+        case ErrorCode::InvalidArgument:
+            return "INVALID_ARGUMENT";
+        case ErrorCode::ServiceNotReady:
+            return "SERVICE_NOT_READY";
+        case ErrorCode::MySqlUnavailable:
+            return "MYSQL_UNAVAILABLE";
+        case ErrorCode::RedisUnavailable:
+            return "REDIS_UNAVAILABLE";
+        case ErrorCode::StorageIoError:
+            return "STORAGE_IO_ERROR";
+    }
+    throw std::logic_error("unknown ErrorCode");
+}
+
+int httpStatus(ErrorCode code) {
+    switch (code) {
+        case ErrorCode::Ok:
+            return 200;
+        case ErrorCode::InvalidArgument:
+            return 400;
+        case ErrorCode::StorageIoError:
+            return 500;
+        case ErrorCode::ServiceNotReady:
+        case ErrorCode::MySqlUnavailable:
+        case ErrorCode::RedisUnavailable:
+            return 503;
+    }
+    throw std::logic_error("unknown ErrorCode");
+}
+
+nlohmann::json makeApiResponse(ErrorCode code, const std::string& message,
+                               const std::string& request_id, const nlohmann::json& data) {
+    return nlohmann::json{{"code", errorCodeName(code)},
+                          {"message", message},
+                          {"request_id", request_id},
+                          {"data", data}};
+}
+
+void sendApiResponse(wfrest::HttpResp* response, ErrorCode code, const std::string& message,
+                     const std::string& request_id, const nlohmann::json& data) {
+    response->set_status(httpStatus(code));
+    response->add_header("X-Request-Id", request_id);
+    response->Json(makeApiResponse(code, message, request_id, data).dump());
+}
+
+}  // namespace datastream
+}  // namespace smt

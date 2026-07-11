@@ -28,6 +28,7 @@ cmake_install.cmake
 .DS_Store
 
 # 其他
+SMT产线项目.md
 .codex
 .agents
 .env
