@@ -39,6 +39,12 @@
     "max_chunk_size_bytes": 8388608,
     "max_file_size_bytes": 2147483648,
     "hash_mmap_window_bytes": 67108864,
+    "min_free_space_bytes": 10737418240,
+    "min_free_space_percent": 15,
+    "max_active_sessions": 24,
+    "max_device_sessions": 2,
+    "max_collector_sessions": 6,
+    "max_reserved_bytes": 53687091200,
     "temp_root": "./data/upload_tmp",
     "archive_root": "./data/archive"
   },

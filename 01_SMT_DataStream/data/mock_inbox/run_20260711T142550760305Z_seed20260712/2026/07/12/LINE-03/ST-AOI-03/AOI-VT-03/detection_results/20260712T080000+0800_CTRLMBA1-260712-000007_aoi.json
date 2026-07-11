@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "record_type": "aoi_inspection_result",
+  "result_id": "AOI-CTRLMBA1-260712-000007",
+  "line_id": "LINE-03",
+  "station_id": "ST-AOI-03",
+  "station_type": "AOI",
+  "device_id": "AOI-VT-03",
+  "device_model": "VT-S730",
+  "collector_id": "IPC-L03-01",
+  "software_version": "5.4.7",
+  "work_order": "WO-20260712-001",
+  "product_model": "CTRL-MB-A1",
+  "product_sn": "CTRLMBA1-260712-000007",
+  "panel_sn": "PNL-260712-00001",
+  "recipe_name": "CTRL-MB-A1_AOI_R03",
+  "inspected_at": "2026-07-12T08:00:00.000+08:00",
+  "result": "NG",
+  "cycle_time_ms": 1486,
+  "component_count": 386,
+  "defect_count": 1,
+  "defects": [
+    {
+      "defect_code": "SOLDER_BRIDGE",
+      "defect_name": "焊锡桥连",
+      "reference": "U3",
+      "x_mm": 75.468,
+      "y_mm": 39.538,
+      "confidence": 0.985,
+      "image_file": "CTRLMBA1-260712-000007_U3_SOLDER_BRIDGE.png"
+    }
+  ]
+}

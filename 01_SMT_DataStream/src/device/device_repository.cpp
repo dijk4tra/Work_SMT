@@ -69,5 +69,22 @@ WFMySQLTask* DeviceRepository::createHeartbeatUpdateTask(
     });
 }
 
+WFMySQLTask* DeviceRepository::createBindingCheckTask(
+    const std::string& collector_id, const std::string& device_id,
+    const std::function<void(bool, bool)>& callback) const {
+    const std::string sql = "SELECT enabled FROM collector_device_binding WHERE collector_id=" +
+                            quoteSql(collector_id) + " AND device_id=" + quoteSql(device_id) +
+                            " LIMIT 1";
+    return mysql_.createQuery(sql, timeout_ms_, [callback](WFMySQLTask* task) {
+        if (task->get_state() != WFT_STATE_SUCCESS || task->get_resp()->is_error_packet()) {
+            callback(false, false);
+            return;
+        }
+        protocol::MySQLResultCursor cursor(task->get_resp());
+        std::vector<protocol::MySQLCell> row;
+        callback(true, cursor.fetch_row(row) && row.size() == 1 && row[0].as_int() == 1);
+    });
+}
+
 }  // namespace datastream
 }  // namespace smt

@@ -16,34 +16,23 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
-DEVICES = (
+DEVICE_TYPES = (
+    ("SPI", "SPI-ZM", "Zenith 2 Alpha", "3.8.12"),
+    ("AOI", "AOI-VT", "VT-S730", "5.4.7"),
+    ("FCT", "FCT-TRI", "TR5001 FCT", "2.6.3"),
+)
+DEVICES = tuple(
     {
-        "line_id": "LINE-01",
-        "station_id": "ST-SPI-01",
-        "station_type": "SPI",
-        "device_id": "SPI-ZM-01",
-        "device_model": "Zenith 2 Alpha",
-        "collector_id": "IPC-L01-01",
-        "software_version": "3.8.12",
-    },
-    {
-        "line_id": "LINE-01",
-        "station_id": "ST-AOI-01",
-        "station_type": "AOI",
-        "device_id": "AOI-VT-01",
-        "device_model": "VT-S730",
-        "collector_id": "IPC-L01-01",
-        "software_version": "5.4.7",
-    },
-    {
-        "line_id": "LINE-01",
-        "station_id": "ST-ICT-01",
-        "station_type": "ICT",
-        "device_id": "ICT-TRI-01",
-        "device_model": "TR5001 SII",
-        "collector_id": "IPC-L01-02",
-        "software_version": "2.6.3",
-    },
+        "line_id": f"LINE-{line:02d}",
+        "station_id": f"ST-{station_type}-{line:02d}",
+        "station_type": station_type,
+        "device_id": f"{device_prefix}-{line:02d}",
+        "device_model": device_model,
+        "collector_id": f"IPC-L{line:02d}-01",
+        "software_version": software_version,
+    }
+    for line in range(1, 4)
+    for station_type, device_prefix, device_model, software_version in DEVICE_TYPES
 )
 
 PRODUCT_MODELS = ("CTRL-MB-A1", "POWER-DRV-B2")
@@ -227,7 +216,7 @@ def generate_aoi_result(path, image_dir, context, rng):
     return payload["result"], images
 
 
-def generate_ict_report(path, context, rng):
+def generate_fct_report(path, context, rng):
     rows = []
     overall = "PASS"
     tests = (
@@ -354,8 +343,8 @@ def generate_device_cycle(run_root, device, moment, sequence, rng):
         result, images = generate_aoi_result(result_path, date_root / "ng_images", context, rng)
         file_type = "DETECTION_RESULT"
     else:
-        result_path = date_root / "test_reports" / f"{stamp}_{context['product_sn']}_ict.csv"
-        result, images = generate_ict_report(result_path, context, rng)
+        result_path = date_root / "test_reports" / f"{stamp}_{context['product_sn']}_fct.csv"
+        result, images = generate_fct_report(result_path, context, rng)
         file_type = "TEST_REPORT"
     records.append(file_record(run_root, result_path, file_type, device, context, result))
     for image_path in images:

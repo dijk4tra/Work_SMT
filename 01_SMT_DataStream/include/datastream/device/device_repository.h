@@ -65,6 +65,15 @@ class DeviceRepository {
                                            const std::string& last_seen_mysql,
                                            const std::function<void(bool)>& callback) const;
 
+    /// @brief 创建采集器与设备启用绑定查询任务。
+    /// @param collector_id 已校验采集器编号。
+    /// @param device_id 已认证设备编号。
+    /// @param callback 返回查询是否成功以及绑定是否启用。
+    /// @return 尚未启动的 Workflow MySQL 任务。
+    WFMySQLTask* createBindingCheckTask(const std::string& collector_id,
+                                        const std::string& device_id,
+                                        const std::function<void(bool, bool)>& callback) const;
+
    private:
     const MySqlClient& mysql_;
     int timeout_ms_;

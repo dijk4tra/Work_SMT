@@ -18,19 +18,28 @@ namespace datastream {
 
 /// @brief HTTP 接口使用的稳定业务错误码。
 enum class ErrorCode {
-    Ok = 0,                ///< 请求成功。
-    InvalidArgument,       ///< 外部参数不符合契约。
-    AuthRequired,          ///< 缺少认证信息。
-    SignatureInvalid,      ///< 摘要或签名不正确。
-    TimestampExpired,      ///< 设备请求时间超出允许窗口。
-    RequestReplayed,       ///< 请求标识已在防重放窗口中使用。
-    DeviceDisabled,        ///< 设备、工位或产线已停用。
-    DeviceNotFound,        ///< 设备未登记。
-    OperatorTokenInvalid,  ///< 运维令牌不正确。
-    ServiceNotReady,       ///< 必要依赖或目录尚未就绪。
-    MySqlUnavailable,      ///< MySQL 当前不可用。
-    RedisUnavailable,      ///< Redis 当前不可用。
-    StorageIoError         ///< 文件系统操作失败。
+    Ok = 0,                   ///< 请求成功。
+    InvalidArgument,          ///< 外部参数不符合契约。
+    AuthRequired,             ///< 缺少认证信息。
+    SignatureInvalid,         ///< 摘要或签名不正确。
+    TimestampExpired,         ///< 设备请求时间超出允许窗口。
+    RequestReplayed,          ///< 请求标识已在防重放窗口中使用。
+    DeviceDisabled,           ///< 设备、工位或产线已停用。
+    DeviceNotFound,           ///< 设备未登记。
+    CollectorDeviceMismatch,  ///< 采集器未获授权操作设备。
+    UploadNotFound,           ///< 上传会话不存在或已过期。
+    UploadDeviceMismatch,     ///< 上传会话不属于当前设备。
+    UploadStateConflict,      ///< 上传会话状态不允许当前操作。
+    ChunkContentConflict,     ///< 已登记分片收到不同内容。
+    FileTooLarge,             ///< 文件大小超过接口上限。
+    ChunkTooLarge,            ///< 分片大小超过接口上限。
+    UploadLimitExceeded,      ///< 在途会话或预留容量超过配额。
+    StorageCapacityExceeded,  ///< 文件系统剩余空间低于安全水位。
+    OperatorTokenInvalid,     ///< 运维令牌不正确。
+    ServiceNotReady,          ///< 必要依赖或目录尚未就绪。
+    MySqlUnavailable,         ///< MySQL 当前不可用。
+    RedisUnavailable,         ///< Redis 当前不可用。
+    StorageIoError            ///< 文件系统操作失败。
 };
 
 /// @brief 返回业务错误码的稳定字符串。

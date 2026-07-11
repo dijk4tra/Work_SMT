@@ -25,6 +25,8 @@ struct HeartbeatState {
     DeviceAuthResult auth;
     DeviceHeartbeat heartbeat;
     ServerTime server_time;
+    bool binding_available;
+    bool collector_bound;
     bool mysql_saved;
     bool redis_saved;
 };
@@ -73,6 +75,8 @@ void HeartbeatController::registerRoutes(wfrest::HttpServer& server) {
 
                 const std::shared_ptr<HeartbeatState> state(new HeartbeatState());
                 state->auth = auth;
+                state->binding_available = false;
+                state->collector_bound = false;
                 state->mysql_saved = false;
                 state->redis_saved = false;
                 std::string error_message;
@@ -83,38 +87,64 @@ void HeartbeatController::registerRoutes(wfrest::HttpServer& server) {
                 }
                 state->server_time = currentServerTime();
 
-                WFMySQLTask* mysql_task = repository_.createHeartbeatUpdateTask(
-                    auth.identity.device_id, state->heartbeat.software_version,
-                    state->server_time.mysql, [this, state, series](bool saved) {
-                        state->mysql_saved = saved;
-                        if (!saved) {
+                WFMySQLTask* binding = repository_.createBindingCheckTask(
+                    state->heartbeat.collector_id, auth.identity.device_id,
+                    [this, state, series](bool available, bool bound) {
+                        state->binding_available = available;
+                        state->collector_bound = bound;
+                        if (!available || !bound) {
                             return;
                         }
-                        const std::string key =
-                            redis_key_prefix_ + "heartbeat:" + state->auth.identity.device_id;
-                        std::vector<std::string> params{kHeartbeatScript,
-                                                        "1",
-                                                        key,
-                                                        state->heartbeat.collector_id,
-                                                        state->heartbeat.software_version,
-                                                        state->heartbeat.runtime_status,
-                                                        state->heartbeat.work_order,
-                                                        state->heartbeat.reported_at,
-                                                        state->server_time.iso8601,
-                                                        std::to_string(heartbeat_ttl_seconds_)};
-                        WFRedisTask* redis_task = redis_.createCommand(
-                            "EVAL", params, timeout_ms_, [state](WFRedisTask* task) {
-                                if (task->get_state() != WFT_STATE_SUCCESS) {
+                        WFMySQLTask* mysql_task = repository_.createHeartbeatUpdateTask(
+                            state->auth.identity.device_id, state->heartbeat.software_version,
+                            state->server_time.mysql, [this, state, series](bool saved) {
+                                state->mysql_saved = saved;
+                                if (!saved) {
                                     return;
                                 }
-                                protocol::RedisValue value;
-                                task->get_resp()->get_result(value);
-                                state->redis_saved = value.is_int() && value.int_value() == 1;
+                                const std::string key = redis_key_prefix_ + "heartbeat:" +
+                                                        state->auth.identity.device_id;
+                                std::vector<std::string> params{
+                                    kHeartbeatScript,
+                                    "1",
+                                    key,
+                                    state->heartbeat.collector_id,
+                                    state->heartbeat.software_version,
+                                    state->heartbeat.runtime_status,
+                                    state->heartbeat.work_order,
+                                    state->heartbeat.reported_at,
+                                    state->server_time.iso8601,
+                                    std::to_string(heartbeat_ttl_seconds_)};
+                                WFRedisTask* redis_task = redis_.createCommand(
+                                    "EVAL", params, timeout_ms_, [state](WFRedisTask* task) {
+                                        if (task->get_state() != WFT_STATE_SUCCESS) {
+                                            return;
+                                        }
+                                        protocol::RedisValue value;
+                                        task->get_resp()->get_result(value);
+                                        state->redis_saved =
+                                            value.is_int() && value.int_value() == 1;
+                                    });
+                                series->push_front(redis_task);
                             });
-                        series->push_front(redis_task);
+                        series->push_front(mysql_task);
                     });
                 WFTimerTask* finish =
                     WFTaskFactory::create_timer_task(0, 0, [state, response](WFTimerTask*) {
+                        if (!state->binding_available) {
+                            spdlog::error("heartbeat_mysql_update_failed request_id={}",
+                                          state->auth.request_id);
+                            sendApiResponse(response, ErrorCode::MySqlUnavailable,
+                                            "MySQL is unavailable", state->auth.request_id,
+                                            nullptr);
+                            return;
+                        }
+                        if (!state->collector_bound) {
+                            sendApiResponse(response, ErrorCode::CollectorDeviceMismatch,
+                                            "collector is not authorized for device",
+                                            state->auth.request_id, nullptr);
+                            return;
+                        }
                         if (!state->mysql_saved) {
                             spdlog::error("heartbeat_mysql_update_failed request_id={}",
                                           state->auth.request_id);
@@ -137,7 +167,7 @@ void HeartbeatController::registerRoutes(wfrest::HttpServer& server) {
                                            {"last_seen_at", state->server_time.iso8601},
                                            {"online", true}});
                     });
-                series->push_back(mysql_task);
+                series->push_back(binding);
                 series->push_back(finish);
             });
     });

@@ -9,7 +9,10 @@ add_executable(
     unit/operator_authenticator_test.cpp
     unit/storage_paths_test.cpp
     unit/time_utils_test.cpp
+    unit/upload_model_test.cpp
+    unit/upload_repository_test.cpp
     unit/uri_utils_test.cpp
+    unit/uuid_test.cpp
 )
 target_link_libraries(datastream_unit_tests PRIVATE datastream_core GTest::gtest_main)
 target_compile_options(datastream_unit_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -41,4 +44,12 @@ if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
             $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
     )
     set_tests_properties(HeartbeatE2ETest PROPERTIES LABELS integration TIMEOUT 30)
+
+    add_test(
+        NAME UploadE2ETest
+        COMMAND
+            ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/e2e/upload_e2e_test.py
+            $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
+    )
+    set_tests_properties(UploadE2ETest PROPERTIES LABELS integration TIMEOUT 60)
 endif()

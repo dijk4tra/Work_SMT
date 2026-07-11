@@ -119,8 +119,6 @@ def main():
     os.environ.update(environment)
 
     disabled_device = "AOI-DISABLED-TEST"
-    redis("DEL", "smt:datastream:auth:req:AOI-VT-01:E2E_VALID_REQUEST_0001")
-    redis("DEL", "smt:datastream:auth:req:AOI-VT-01:E2E_INVALID_BODY_0001")
     mysql(
         "USE smt_datastream; INSERT INTO device "
         "(device_id,station_id,device_model,software_version,hmac_secret,enabled) VALUES "
@@ -131,6 +129,13 @@ def main():
     with tempfile.TemporaryDirectory(prefix="datastream-e2e-") as temporary:
         temporary_path = Path(temporary)
         config = json.loads(source_config.read_text(encoding="utf-8"))
+        key_prefix = config["redis"]["key_prefix"]
+        valid_request_key = key_prefix + "auth:req:AOI-VT-01:E2E_VALID_REQUEST_0001"
+        invalid_body_key = key_prefix + "auth:req:AOI-VT-01:E2E_INVALID_BODY_0001"
+        heartbeat_key = key_prefix + "heartbeat:AOI-VT-01"
+        redis("DEL", valid_request_key)
+        redis("DEL", invalid_body_key)
+        redis("DEL", heartbeat_key)
         port = free_port()
         config["http"]["port"] = port
         config["upload"]["temp_root"] = str(temporary_path / "upload")
@@ -216,7 +221,6 @@ def main():
                 "SELECT last_seen_at IS NOT NULL FROM smt_datastream.device "
                 "WHERE device_id='AOI-VT-01'"
             ) == "1"
-            heartbeat_key = "smt:datastream:heartbeat:AOI-VT-01"
             ttl = int(redis("TTL", heartbeat_key))
             assert 0 < ttl <= config["device"]["heartbeat_ttl_seconds"]
             assert redis("HGET", heartbeat_key, "runtime_status") == "RUNNING"
@@ -224,10 +228,12 @@ def main():
             process.send_signal(signal.SIGTERM)
             stdout, stderr = process.communicate(timeout=10)
             if process.returncode != 0:
-                raise AssertionError(f"server exit={process.returncode} stdout={stdout} stderr={stderr}")
-            redis("DEL", "smt:datastream:heartbeat:AOI-VT-01")
-            redis("DEL", "smt:datastream:auth:req:AOI-VT-01:E2E_VALID_REQUEST_0001")
-            redis("DEL", "smt:datastream:auth:req:AOI-VT-01:E2E_INVALID_BODY_0001")
+                raise AssertionError(
+                    f"server exit={process.returncode} stdout={stdout} stderr={stderr}"
+                )
+            redis("DEL", heartbeat_key)
+            redis("DEL", valid_request_key)
+            redis("DEL", invalid_body_key)
             mysql("DELETE FROM smt_datastream.device WHERE device_id='AOI-DISABLED-TEST'")
 
         log_text = (temporary_path / "datastream.log").read_text(encoding="utf-8")

@@ -238,7 +238,9 @@ AppConfig AppConfig::load(const std::string& path) {
         requireExactKeys(
             upload,
             {"session_ttl_seconds", "min_chunk_size_bytes", "max_chunk_size_bytes",
-             "max_file_size_bytes", "hash_mmap_window_bytes", "temp_root", "archive_root"},
+             "max_file_size_bytes", "hash_mmap_window_bytes", "min_free_space_bytes",
+             "min_free_space_percent", "max_active_sessions", "max_device_sessions",
+             "max_collector_sessions", "max_reserved_bytes", "temp_root", "archive_root"},
             "upload");
         config.upload.session_ttl_seconds = static_cast<int>(
             requireUnsigned(upload, "session_ttl_seconds", 60, 7 * 86400, "upload"));
@@ -250,6 +252,18 @@ AppConfig AppConfig::load(const std::string& path) {
             requireUnsigned(upload, "max_file_size_bytes", 1, 16ULL * 1024 * 1024 * 1024, "upload");
         config.upload.hash_mmap_window_bytes = static_cast<std::size_t>(requireUnsigned(
             upload, "hash_mmap_window_bytes", 4096, 1024ULL * 1024 * 1024, "upload"));
+        config.upload.min_free_space_bytes = requireUnsigned(
+            upload, "min_free_space_bytes", 0, 1024ULL * 1024 * 1024 * 1024, "upload");
+        config.upload.min_free_space_percent =
+            static_cast<int>(requireUnsigned(upload, "min_free_space_percent", 0, 99, "upload"));
+        config.upload.max_active_sessions =
+            static_cast<int>(requireUnsigned(upload, "max_active_sessions", 1, 10000, "upload"));
+        config.upload.max_device_sessions =
+            static_cast<int>(requireUnsigned(upload, "max_device_sessions", 1, 1000, "upload"));
+        config.upload.max_collector_sessions =
+            static_cast<int>(requireUnsigned(upload, "max_collector_sessions", 1, 1000, "upload"));
+        config.upload.max_reserved_bytes = requireUnsigned(
+            upload, "max_reserved_bytes", 1, 16ULL * 1024 * 1024 * 1024 * 1024, "upload");
         config.upload.temp_root = requireString(upload, "temp_root", "upload");
         config.upload.archive_root = requireString(upload, "archive_root", "upload");
         if (config.upload.temp_root == config.upload.archive_root) {
@@ -259,6 +273,11 @@ AppConfig AppConfig::load(const std::string& path) {
             config.upload.max_chunk_size_bytes > config.upload.max_file_size_bytes ||
             config.upload.max_chunk_size_bytes > config.http.request_body_limit_bytes) {
             throw ConfigError("upload chunk and file size limits are inconsistent");
+        }
+        if (config.upload.max_device_sessions > config.upload.max_active_sessions ||
+            config.upload.max_collector_sessions > config.upload.max_active_sessions ||
+            config.upload.max_reserved_bytes < config.upload.max_file_size_bytes) {
+            throw ConfigError("upload session quota limits are inconsistent");
         }
 
         const Json& cleanup = root.at("cleanup");

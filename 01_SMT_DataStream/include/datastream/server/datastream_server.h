@@ -10,6 +10,7 @@
 
 #include "datastream/api/health_controller.h"
 #include "datastream/api/heartbeat_controller.h"
+#include "datastream/api/upload_controller.h"
 #include "datastream/auth/device_authenticator.h"
 #include "datastream/auth/operator_authenticator.h"
 #include "datastream/config/app_config.h"
@@ -17,6 +18,7 @@
 #include "datastream/storage/mysql_client.h"
 #include "datastream/storage/redis_client.h"
 #include "datastream/storage/storage_paths.h"
+#include "datastream/upload/upload_repository.h"
 
 namespace smt {
 namespace datastream {
@@ -49,8 +51,10 @@ class DataStreamServer {
     DeviceRepository device_repository_;
     DeviceAuthenticator device_authenticator_;
     OperatorAuthenticator operator_authenticator_;
+    UploadRepository upload_repository_;
     HealthController health_controller_;
     HeartbeatController heartbeat_controller_;
+    UploadController upload_controller_;
     bool started_;
 };
 

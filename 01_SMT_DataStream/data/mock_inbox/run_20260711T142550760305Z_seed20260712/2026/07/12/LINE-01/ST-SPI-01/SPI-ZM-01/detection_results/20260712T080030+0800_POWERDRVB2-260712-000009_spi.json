@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0",
+  "record_type": "spi_inspection_result",
+  "result_id": "SPI-POWERDRVB2-260712-000009",
+  "line_id": "LINE-01",
+  "station_id": "ST-SPI-01",
+  "station_type": "SPI",
+  "device_id": "SPI-ZM-01",
+  "device_model": "Zenith 2 Alpha",
+  "collector_id": "IPC-L01-01",
+  "software_version": "3.8.12",
+  "work_order": "WO-20260712-001",
+  "product_model": "POWER-DRV-B2",
+  "product_sn": "POWERDRVB2-260712-000009",
+  "panel_sn": "PNL-260712-00002",
+  "recipe_name": "POWER-DRV-B2_SPI_R03",
+  "inspected_at": "2026-07-12T08:00:30.000+08:00",
+  "result": "PASS",
+  "cycle_time_ms": 899,
+  "thresholds": {
+    "volume_percent": [
+      75.0,
+      125.0
+    ],
+    "height_um": [
+      95.0,
+      145.0
+    ]
+  },
+  "pads": [
+    {
+      "pad_id": "U3-01",
+      "volume_percent": 85.97,
+      "height_um": 112.91,
+      "area_percent": 97.23,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-02",
+      "volume_percent": 103.44,
+      "height_um": 111.97,
+      "area_percent": 97.73,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-03",
+      "volume_percent": 98.94,
+      "height_um": 113.34,
+      "area_percent": 93.44,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-04",
+      "volume_percent": 90.01,
+      "height_um": 114.96,
+      "area_percent": 96.34,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-05",
+      "volume_percent": 88.07,
+      "height_um": 114.55,
+      "area_percent": 98.56,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-06",
+      "volume_percent": 107.7,
+      "height_um": 111.04,
+      "area_percent": 101.47,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-07",
+      "volume_percent": 104.42,
+      "height_um": 118.84,
+      "area_percent": 102.61,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-08",
+      "volume_percent": 107.6,
+      "height_um": 124.81,
+      "area_percent": 100.83,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-09",
+      "volume_percent": 92.13,
+      "height_um": 118.14,
+      "area_percent": 96.79,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-10",
+      "volume_percent": 90.9,
+      "height_um": 106.96,
+      "area_percent": 90.11,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-11",
+      "volume_percent": 99.32,
+      "height_um": 114.65,
+      "area_percent": 100.74,
+      "result": "PASS"
+    },
+    {
+      "pad_id": "U3-12",
+      "volume_percent": 85.37,
+      "height_um": 118.88,
+      "area_percent": 99.34,
+      "result": "PASS"
+    }
+  ]
+}

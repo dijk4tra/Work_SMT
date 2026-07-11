@@ -43,6 +43,12 @@ TEST(ApiResponseTest, MapsDeviceAuthenticationFailures) {
     EXPECT_EQ(httpStatus(ErrorCode::RequestReplayed), 409);
     EXPECT_EQ(httpStatus(ErrorCode::DeviceDisabled), 403);
     EXPECT_EQ(httpStatus(ErrorCode::DeviceNotFound), 404);
+    EXPECT_EQ(httpStatus(ErrorCode::CollectorDeviceMismatch), 403);
+    EXPECT_EQ(httpStatus(ErrorCode::UploadNotFound), 404);
+    EXPECT_EQ(httpStatus(ErrorCode::ChunkContentConflict), 409);
+    EXPECT_EQ(httpStatus(ErrorCode::FileTooLarge), 413);
+    EXPECT_EQ(httpStatus(ErrorCode::UploadLimitExceeded), 429);
+    EXPECT_EQ(httpStatus(ErrorCode::StorageCapacityExceeded), 507);
 }
 
 TEST(ApiResponseTest, GeneratesDistinctServerRequestIds) {

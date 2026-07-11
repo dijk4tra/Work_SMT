@@ -72,6 +72,12 @@ struct UploadConfig {
     std::size_t max_chunk_size_bytes;
     std::uint64_t max_file_size_bytes;
     std::size_t hash_mmap_window_bytes;
+    std::uint64_t min_free_space_bytes;
+    int min_free_space_percent;
+    int max_active_sessions;
+    int max_device_sessions;
+    int max_collector_sessions;
+    std::uint64_t max_reserved_bytes;
     std::string temp_root;
     std::string archive_root;
 };

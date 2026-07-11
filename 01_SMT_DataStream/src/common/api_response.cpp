@@ -30,6 +30,24 @@ const char* errorCodeName(ErrorCode code) {
             return "DEVICE_DISABLED";
         case ErrorCode::DeviceNotFound:
             return "DEVICE_NOT_FOUND";
+        case ErrorCode::CollectorDeviceMismatch:
+            return "COLLECTOR_DEVICE_MISMATCH";
+        case ErrorCode::UploadNotFound:
+            return "UPLOAD_NOT_FOUND";
+        case ErrorCode::UploadDeviceMismatch:
+            return "UPLOAD_DEVICE_MISMATCH";
+        case ErrorCode::UploadStateConflict:
+            return "UPLOAD_STATE_CONFLICT";
+        case ErrorCode::ChunkContentConflict:
+            return "CHUNK_CONTENT_CONFLICT";
+        case ErrorCode::FileTooLarge:
+            return "FILE_TOO_LARGE";
+        case ErrorCode::ChunkTooLarge:
+            return "CHUNK_TOO_LARGE";
+        case ErrorCode::UploadLimitExceeded:
+            return "UPLOAD_LIMIT_EXCEEDED";
+        case ErrorCode::StorageCapacityExceeded:
+            return "STORAGE_CAPACITY_EXCEEDED";
         case ErrorCode::OperatorTokenInvalid:
             return "OPERATOR_TOKEN_INVALID";
         case ErrorCode::ServiceNotReady:
@@ -56,11 +74,23 @@ int httpStatus(ErrorCode code) {
         case ErrorCode::OperatorTokenInvalid:
             return 401;
         case ErrorCode::DeviceDisabled:
+        case ErrorCode::CollectorDeviceMismatch:
+        case ErrorCode::UploadDeviceMismatch:
             return 403;
         case ErrorCode::DeviceNotFound:
+        case ErrorCode::UploadNotFound:
             return 404;
         case ErrorCode::RequestReplayed:
+        case ErrorCode::UploadStateConflict:
+        case ErrorCode::ChunkContentConflict:
             return 409;
+        case ErrorCode::FileTooLarge:
+        case ErrorCode::ChunkTooLarge:
+            return 413;
+        case ErrorCode::UploadLimitExceeded:
+            return 429;
+        case ErrorCode::StorageCapacityExceeded:
+            return 507;
         case ErrorCode::StorageIoError:
             return 500;
         case ErrorCode::ServiceNotReady:

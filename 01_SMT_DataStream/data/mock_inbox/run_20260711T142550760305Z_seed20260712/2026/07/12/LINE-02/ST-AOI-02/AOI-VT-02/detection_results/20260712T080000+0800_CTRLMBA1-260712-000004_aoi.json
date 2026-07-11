@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "record_type": "aoi_inspection_result",
+  "result_id": "AOI-CTRLMBA1-260712-000004",
+  "line_id": "LINE-02",
+  "station_id": "ST-AOI-02",
+  "station_type": "AOI",
+  "device_id": "AOI-VT-02",
+  "device_model": "VT-S730",
+  "collector_id": "IPC-L02-01",
+  "software_version": "5.4.7",
+  "work_order": "WO-20260712-001",
+  "product_model": "CTRL-MB-A1",
+  "product_sn": "CTRLMBA1-260712-000004",
+  "panel_sn": "PNL-260712-00001",
+  "recipe_name": "CTRL-MB-A1_AOI_R03",
+  "inspected_at": "2026-07-12T08:00:00.000+08:00",
+  "result": "NG",
+  "cycle_time_ms": 1709,
+  "component_count": 386,
+  "defect_count": 1,
+  "defects": [
+    {
+      "defect_code": "INSUFFICIENT_SOLDER",
+      "defect_name": "少锡",
+      "reference": "C27",
+      "x_mm": 50.334,
+      "y_mm": 10.935,
+      "confidence": 0.9156,
+      "image_file": "CTRLMBA1-260712-000004_C27_INSUFFICIENT_SOLDER.png"
+    }
+  ]
+}

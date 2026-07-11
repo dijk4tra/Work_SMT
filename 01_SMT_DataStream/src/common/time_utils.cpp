@@ -92,5 +92,17 @@ bool parseIso8601Milliseconds(const std::string& value, std::int64_t* unix_milli
     return true;
 }
 
+std::string formatUtcMilliseconds(std::int64_t unix_milliseconds) {
+    const std::time_t seconds = static_cast<std::time_t>(unix_milliseconds / 1000);
+    const int milliseconds = static_cast<int>(unix_milliseconds % 1000);
+    std::tm utc;
+    gmtime_r(&seconds, &utc);
+    char base[32];
+    std::strftime(base, sizeof(base), "%Y-%m-%dT%H:%M:%S", &utc);
+    char output[40];
+    std::snprintf(output, sizeof(output), "%s.%03dZ", base, milliseconds);
+    return output;
+}
+
 }  // namespace datastream
 }  // namespace smt

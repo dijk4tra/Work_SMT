@@ -32,6 +32,11 @@ ServerTime currentServerTime();
 /// @return 格式、日历时间和时区均有效时返回 true。
 bool parseIso8601Milliseconds(const std::string& value, std::int64_t* unix_milliseconds);
 
+/// @brief 将 Unix 毫秒格式化为 UTC ISO 8601。
+/// @param unix_milliseconds Unix 毫秒。
+/// @return 毫秒精度且以 Z 结尾的 UTC 时间。
+std::string formatUtcMilliseconds(std::int64_t unix_milliseconds);
+
 }  // namespace datastream
 }  // namespace smt
 

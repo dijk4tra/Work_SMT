@@ -63,6 +63,9 @@ TEST_F(AppConfigTest, LoadsCompleteContract) {
     EXPECT_TRUE(config.redis.password.empty());
     EXPECT_EQ(config.health.check_timeout_ms, 3000);
     EXPECT_LE(config.upload.max_chunk_size_bytes, config.http.request_body_limit_bytes);
+    EXPECT_EQ(config.upload.max_active_sessions, 24);
+    EXPECT_EQ(config.upload.max_device_sessions, 2);
+    EXPECT_EQ(config.upload.min_free_space_percent, 15);
 }
 
 TEST_F(AppConfigTest, RejectsMissingRequiredEnvironment) {
@@ -81,6 +84,14 @@ TEST_F(AppConfigTest, RejectsUnknownField) {
 TEST_F(AppConfigTest, RejectsInconsistentChunkLimit) {
     nlohmann::json content = readExampleConfig();
     content["http"]["request_body_limit_bytes"] = 1024;
+    temporary_path_ = writeTemporaryConfig(content);
+
+    EXPECT_THROW(AppConfig::load(temporary_path_), ConfigError);
+}
+
+TEST_F(AppConfigTest, RejectsInconsistentSessionQuota) {
+    nlohmann::json content = readExampleConfig();
+    content["upload"]["max_device_sessions"] = 25;
     temporary_path_ = writeTemporaryConfig(content);
 
     EXPECT_THROW(AppConfig::load(temporary_path_), ConfigError);
