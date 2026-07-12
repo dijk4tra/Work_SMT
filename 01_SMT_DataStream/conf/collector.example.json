@@ -1,0 +1,26 @@
+{
+  "server_url": "http://127.0.0.1:8080",
+  "spool_root": "./data/collector_spool",
+  "scan_interval_ms": 2000,
+  "stable_scan_count": 3,
+  "request_timeout_ms": 5000,
+  "chunk_size_bytes": 1048576,
+  "spool_max_bytes": 21474836480,
+  "spool_min_free_bytes": 2147483648,
+  "retry": {
+    "max_backoff_steps": 8,
+    "base_delay_ms": 1000,
+    "max_delay_ms": 300000
+  },
+  "devices": [
+    {"line_id":"LINE-01","station_id":"ST-SPI-01","device_id":"SPI-ZM-01","collector_id":"IPC-L01-01","input_dir":"./data/device_inbox/LINE-01/SPI-ZM-01","secret_env":"SMT_SECRET_SPI_ZM_01","seal_mode":"ATOMIC_RENAME"},
+    {"line_id":"LINE-01","station_id":"ST-AOI-01","device_id":"AOI-VT-01","collector_id":"IPC-L01-01","input_dir":"./data/device_inbox/LINE-01/AOI-VT-01","secret_env":"SMT_SECRET_AOI_VT_01","seal_mode":"STABLE_WINDOW"},
+    {"line_id":"LINE-01","station_id":"ST-FCT-01","device_id":"FCT-TRI-01","collector_id":"IPC-L01-01","input_dir":"./data/device_inbox/LINE-01/FCT-TRI-01","secret_env":"SMT_SECRET_FCT_TRI_01","seal_mode":"DONE_MARKER"},
+    {"line_id":"LINE-02","station_id":"ST-SPI-02","device_id":"SPI-ZM-02","collector_id":"IPC-L02-01","input_dir":"./data/device_inbox/LINE-02/SPI-ZM-02","secret_env":"SMT_SECRET_SPI_ZM_02","seal_mode":"ATOMIC_RENAME"},
+    {"line_id":"LINE-02","station_id":"ST-AOI-02","device_id":"AOI-VT-02","collector_id":"IPC-L02-01","input_dir":"./data/device_inbox/LINE-02/AOI-VT-02","secret_env":"SMT_SECRET_AOI_VT_02","seal_mode":"STABLE_WINDOW"},
+    {"line_id":"LINE-02","station_id":"ST-FCT-02","device_id":"FCT-TRI-02","collector_id":"IPC-L02-01","input_dir":"./data/device_inbox/LINE-02/FCT-TRI-02","secret_env":"SMT_SECRET_FCT_TRI_02","seal_mode":"DONE_MARKER"},
+    {"line_id":"LINE-03","station_id":"ST-SPI-03","device_id":"SPI-ZM-03","collector_id":"IPC-L03-01","input_dir":"./data/device_inbox/LINE-03/SPI-ZM-03","secret_env":"SMT_SECRET_SPI_ZM_03","seal_mode":"ATOMIC_RENAME"},
+    {"line_id":"LINE-03","station_id":"ST-AOI-03","device_id":"AOI-VT-03","collector_id":"IPC-L03-01","input_dir":"./data/device_inbox/LINE-03/AOI-VT-03","secret_env":"SMT_SECRET_AOI_VT_03","seal_mode":"STABLE_WINDOW"},
+    {"line_id":"LINE-03","station_id":"ST-FCT-03","device_id":"FCT-TRI-03","collector_id":"IPC-L03-01","input_dir":"./data/device_inbox/LINE-03/FCT-TRI-03","secret_env":"SMT_SECRET_FCT_TRI_03","seal_mode":"DONE_MARKER"}
+  ]
+}

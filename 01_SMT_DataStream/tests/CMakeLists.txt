@@ -7,17 +7,21 @@ add_executable(
     unit/archive_cursor_test.cpp
     unit/archive_storage_test.cpp
     unit/cleanup_service_test.cpp
+    unit/collector_config_test.cpp
     unit/crypto_test.cpp
     unit/heartbeat_test.cpp
     unit/operator_authenticator_test.cpp
     unit/storage_paths_test.cpp
+    unit/spool_store_test.cpp
     unit/time_utils_test.cpp
     unit/upload_model_test.cpp
     unit/upload_repository_test.cpp
     unit/uri_utils_test.cpp
     unit/uuid_test.cpp
 )
-target_link_libraries(datastream_unit_tests PRIVATE datastream_core GTest::gtest_main)
+target_link_libraries(
+    datastream_unit_tests PRIVATE datastream_core datastream_collector_core GTest::gtest_main
+)
 target_compile_options(datastream_unit_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_compile_definitions(
     datastream_unit_tests
@@ -64,4 +68,14 @@ if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
             ${CMAKE_SOURCE_DIR}/data/mock_inbox/run_20260711T142550760305Z_seed20260712
     )
     set_tests_properties(MockArchiveE2ETest PROPERTIES LABELS integration TIMEOUT 180)
+
+    add_test(
+        NAME CollectorE2ETest
+        COMMAND
+            ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/e2e/collector_e2e_test.py
+            $<TARGET_FILE:datastream_server> $<TARGET_FILE:collector_agent>
+            ${CMAKE_SOURCE_DIR}/tools/simulate_device_lifecycle.py
+            ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
+    )
+    set_tests_properties(CollectorE2ETest PROPERTIES LABELS integration TIMEOUT 120)
 endif()

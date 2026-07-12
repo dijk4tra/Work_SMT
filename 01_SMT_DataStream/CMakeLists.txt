@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(SMTDataStream VERSION 0.4.0 LANGUAGES CXX)
+project(SMTDataStream VERSION 0.5.0 LANGUAGES CXX)
 
 option(DATASTREAM_BUILD_TESTS "Build unit tests" ON)
 option(DATASTREAM_ENABLE_INTEGRATION_TESTS "Build tests that connect to local services" OFF)
@@ -86,6 +86,21 @@ endif()
 add_executable(datastream_server src/main.cpp)
 target_link_libraries(datastream_server PRIVATE datastream_core)
 target_compile_options(datastream_server PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+set(COLLECTOR_SOURCES
+    src/collector/collector_app.cpp
+    src/collector/collector_config.cpp
+    src/collector/http_uploader.cpp
+    src/collector/spool_store.cpp
+)
+add_library(datastream_collector_core STATIC ${COLLECTOR_SOURCES})
+target_include_directories(datastream_collector_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(datastream_collector_core PUBLIC datastream_core)
+target_compile_options(datastream_collector_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+add_executable(collector_agent src/collector/main.cpp)
+target_link_libraries(collector_agent PRIVATE datastream_collector_core)
+target_compile_options(collector_agent PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 if(DATASTREAM_BUILD_TESTS)
     enable_testing()
