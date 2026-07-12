@@ -62,36 +62,17 @@ TEST(UploadModelTest, RejectsUnsafeFilenameAndChunkSize) {
 }
 
 TEST(UploadModelTest, ParsesCompleteRedisSession) {
-    const std::vector<std::string> fields{"upload_id",
-                                          "id",
-                                          "state",
-                                          "UPLOADING",
-                                          "device_id",
-                                          "AOI-VT-01",
-                                          "station_id",
-                                          "ST-AOI-01",
-                                          "line_id",
-                                          "LINE-01",
-                                          "collector_id",
-                                          "IPC-L01-01",
-                                          "file_type",
-                                          "NG_IMAGE",
-                                          "original_filename",
-                                          "board.png",
-                                          "temp_path",
-                                          "/tmp/a",
-                                          "file_size",
-                                          "9000",
-                                          "file_sha256",
-                                          std::string(64, 'a'),
-                                          "chunk_size",
-                                          "4096",
-                                          "chunk_count",
-                                          "3",
-                                          "expires_at",
-                                          "1780000000",
-                                          "failure_code",
-                                          ""};
+    const std::vector<std::string> fields{
+        "upload_id",         "id",         "state",        "UPLOADING",
+        "device_id",         "AOI-VT-01",  "station_id",   "ST-AOI-01",
+        "line_id",           "LINE-01",    "collector_id", "IPC-L01-01",
+        "work_order",        "WO-TEST",    "product_sn",   "SN-TEST",
+        "file_type",         "NG_IMAGE",   "result",       "NG",
+        "original_filename", "board.png",  "extension",    "png",
+        "temp_path",         "/tmp/a",     "produced_at",  "2026-07-12T00:00:00.000Z",
+        "file_size",         "9000",       "file_sha256",  std::string(64, 'a'),
+        "chunk_size",        "4096",       "chunk_count",  "3",
+        "expires_at",        "1780000000", "failure_code", ""};
     UploadSession session;
     ASSERT_TRUE(parseUploadSession(fields, &session));
     EXPECT_EQ(session.chunk_count, 3U);

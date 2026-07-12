@@ -35,6 +35,10 @@ enum class ErrorCode {
     ChunkTooLarge,            ///< 分片大小超过接口上限。
     UploadLimitExceeded,      ///< 在途会话或预留容量超过配额。
     StorageCapacityExceeded,  ///< 文件系统剩余空间低于安全水位。
+    ChunksIncomplete,         ///< 上传会话仍有分片未完成。
+    FileIntegrityMismatch,    ///< 最终文件大小或摘要不匹配。
+    InvalidCursor,            ///< 历史查询游标不符合编码契约。
+    ArchiveNotFound,          ///< 归档记录不存在。
     OperatorTokenInvalid,     ///< 运维令牌不正确。
     ServiceNotReady,          ///< 必要依赖或目录尚未就绪。
     MySqlUnavailable,         ///< MySQL 当前不可用。

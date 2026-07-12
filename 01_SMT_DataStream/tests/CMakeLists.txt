@@ -4,6 +4,9 @@ add_executable(
     datastream_unit_tests
     unit/app_config_test.cpp
     unit/api_response_test.cpp
+    unit/archive_cursor_test.cpp
+    unit/archive_storage_test.cpp
+    unit/cleanup_service_test.cpp
     unit/crypto_test.cpp
     unit/heartbeat_test.cpp
     unit/operator_authenticator_test.cpp
@@ -52,4 +55,13 @@ if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
             $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
     )
     set_tests_properties(UploadE2ETest PROPERTIES LABELS integration TIMEOUT 60)
+
+    add_test(
+        NAME MockArchiveE2ETest
+        COMMAND
+            ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/e2e/mock_archive_e2e_test.py
+            $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
+            ${CMAKE_SOURCE_DIR}/data/mock_inbox/run_20260711T142550760305Z_seed20260712
+    )
+    set_tests_properties(MockArchiveE2ETest PROPERTIES LABELS integration TIMEOUT 180)
 endif()

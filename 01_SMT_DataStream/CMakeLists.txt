@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(SMTDataStream VERSION 0.3.0 LANGUAGES CXX)
+project(SMTDataStream VERSION 0.4.0 LANGUAGES CXX)
 
 option(DATASTREAM_BUILD_TESTS "Build unit tests" ON)
 option(DATASTREAM_ENABLE_INTEGRATION_TESTS "Build tests that connect to local services" OFF)
@@ -22,6 +22,10 @@ find_path(WFREST_INCLUDE_DIR wfrest/HttpServer.h PATHS /usr/local/include /usr/i
 find_library(WFREST_LIBRARY wfrest PATHS /usr/local/lib /usr/lib REQUIRED)
 
 set(DATASTREAM_SOURCES
+    src/api/archive_controller.cpp
+    src/archive/archive_model.cpp
+    src/archive/archive_repository.cpp
+    src/archive/archive_storage.cpp
     src/api/health_controller.cpp
     src/api/heartbeat_controller.cpp
     src/api/upload_controller.cpp
@@ -29,12 +33,14 @@ set(DATASTREAM_SOURCES
     src/auth/device_authenticator.cpp
     src/auth/operator_authenticator.cpp
     src/common/api_response.cpp
+    src/common/archive_cursor.cpp
     src/common/logging.cpp
     src/common/request_id.cpp
     src/common/time_utils.cpp
     src/common/uri_utils.cpp
     src/common/validation.cpp
     src/common/uuid.cpp
+    src/cleanup/cleanup_service.cpp
     src/config/app_config.cpp
     src/device/device_repository.cpp
     src/device/heartbeat.cpp

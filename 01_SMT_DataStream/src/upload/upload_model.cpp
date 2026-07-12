@@ -184,10 +184,11 @@ bool parseUploadSession(const std::vector<std::string>& values, UploadSession* s
     for (std::size_t index = 0; index < values.size(); index += 2) {
         fields[values[index]] = values[index + 1];
     }
-    const char* required[] = {"upload_id",   "state",        "device_id",   "station_id",
-                              "line_id",     "collector_id", "file_type",   "original_filename",
-                              "temp_path",   "file_size",    "file_sha256", "chunk_size",
-                              "chunk_count", "expires_at"};
+    const char* required[] = {"upload_id",  "state",        "device_id",         "station_id",
+                              "line_id",    "collector_id", "work_order",        "product_sn",
+                              "file_type",  "result",       "original_filename", "extension",
+                              "temp_path",  "produced_at",  "file_size",         "file_sha256",
+                              "chunk_size", "chunk_count",  "expires_at",        "failure_code"};
     for (std::size_t index = 0; index < sizeof(required) / sizeof(required[0]); ++index) {
         if (fields.count(required[index]) == 0) {
             return false;
@@ -197,10 +198,20 @@ bool parseUploadSession(const std::vector<std::string>& values, UploadSession* s
     std::uint64_t chunk_size = 0;
     std::uint64_t chunk_count = 0;
     std::uint64_t expires_at = 0;
+    std::uint64_t archive_id = 0;
+    std::uint64_t archived_at = 0;
     if (!parseUnsigned(fields["file_size"], &file_size) ||
         !parseUnsigned(fields["chunk_size"], &chunk_size) ||
         !parseUnsigned(fields["chunk_count"], &chunk_count) ||
         !parseUnsigned(fields["expires_at"], &expires_at)) {
+        return false;
+    }
+    if (fields.count("archive_id") != 0 && !fields["archive_id"].empty() &&
+        !parseUnsigned(fields["archive_id"], &archive_id)) {
+        return false;
+    }
+    if (fields.count("archived_at") != 0 && !fields["archived_at"].empty() &&
+        !parseUnsigned(fields["archived_at"], &archived_at)) {
         return false;
     }
     *session = UploadSession{fields["upload_id"],
@@ -209,15 +220,23 @@ bool parseUploadSession(const std::vector<std::string>& values, UploadSession* s
                              fields["station_id"],
                              fields["line_id"],
                              fields["collector_id"],
+                             fields["work_order"],
+                             fields["product_sn"],
                              fields["file_type"],
+                             fields["result"],
                              fields["original_filename"],
+                             fields["extension"],
                              fields["temp_path"],
+                             fields["relative_path"],
+                             fields["produced_at"],
                              file_size,
                              fields["file_sha256"],
                              static_cast<std::size_t>(chunk_size),
                              static_cast<std::size_t>(chunk_count),
                              static_cast<std::int64_t>(expires_at),
-                             fields["failure_code"]};
+                             fields["failure_code"],
+                             archive_id,
+                             static_cast<std::int64_t>(archived_at)};
     return true;
 }
 

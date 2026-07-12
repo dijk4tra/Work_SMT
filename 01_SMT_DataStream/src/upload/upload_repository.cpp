@@ -46,6 +46,31 @@ const char kFinishChunkScript[] =
     "redis.call('ZADD',KEYS[5],ARGV[4],ARGV[5]);redis.call('ZADD',KEYS[6],ARGV[4],ARGV[5]);return "
     "1";
 
+const char kBeginCompleteScript[] =
+    "if redis.call('EXISTS',KEYS[1])==0 then return 5 end;"
+    "local s=redis.call('HGET',KEYS[1],'state');"
+    "if s=='ARCHIVED' then return 2 elseif s=='FAILED' then return 3 "
+    "elseif s=='VERIFYING' then return 1 elseif s~='UPLOADING' then return 3 end;"
+    "if redis.call('BITCOUNT',KEYS[2])~=tonumber(ARGV[1]) then return 4 end;"
+    "redis.call('HSET',KEYS[1],'state','VERIFYING','archived_at',ARGV[2],"
+    "'relative_path',ARGV[3]);return 0";
+
+const char kMarkFailedScript[] =
+    "if redis.call('EXISTS',KEYS[1])==0 then return 0 end;"
+    "redis.call('HSET',KEYS[1],'state','FAILED','failure_code',ARGV[1],'expires_at',ARGV[3]);"
+    "redis.call('EXPIRE',KEYS[1],ARGV[2]);redis.call('EXPIRE',KEYS[2],ARGV[2]);"
+    "redis.call('EXPIRE',KEYS[3],ARGV[2]);redis.call('ZADD',KEYS[4],ARGV[3],ARGV[4]);"
+    "redis.call('ZADD',KEYS[5],ARGV[3],ARGV[4]);"
+    "redis.call('ZADD',KEYS[6],ARGV[3],ARGV[4]);return 1";
+
+const char kMarkArchivedScript[] =
+    "if redis.call('EXISTS',KEYS[1])==0 then return 0 end;"
+    "redis.call('HSET',KEYS[1],'state','ARCHIVED','archive_id',ARGV[1],'archived_at',ARGV[2],"
+    "'relative_path',ARGV[3],'failure_code','');redis.call('EXPIRE',KEYS[1],ARGV[4]);"
+    "redis.call('EXPIRE',KEYS[2],ARGV[4]);redis.call('EXPIRE',KEYS[3],ARGV[4]);"
+    "redis.call('ZREM',KEYS[4],ARGV[5]);"
+    "redis.call('ZREM',KEYS[5],ARGV[5]);redis.call('ZREM',KEYS[6],ARGV[5]);return 1";
+
 bool redisInteger(WFRedisTask* task, std::int64_t* result) {
     if (task->get_state() != WFT_STATE_SUCCESS) {
         return false;
@@ -81,10 +106,12 @@ bool redisStringArray(WFRedisTask* task, std::vector<std::string>* values) {
 }  // namespace
 
 UploadRepository::UploadRepository(const RedisClient& redis, const RedisConfig& redis_config,
-                                   const UploadConfig& upload_config, int timeout_ms)
+                                   const UploadConfig& upload_config, int terminal_ttl_seconds,
+                                   int timeout_ms)
     : redis_(redis),
       key_prefix_(redis_config.key_prefix),
       config_(upload_config),
+      terminal_ttl_seconds_(terminal_ttl_seconds),
       timeout_ms_(timeout_ms) {}
 
 WFRedisTask* UploadRepository::createSessionTask(
@@ -253,6 +280,85 @@ WFRedisTask* UploadRepository::createBitmapTask(
                                     callback(!value.is_error(),
                                              value.is_nil() ? std::string() : value.string_value());
                                 });
+}
+
+WFRedisTask* UploadRepository::createBeginCompleteTask(
+    const std::string& upload_id, std::size_t chunk_count, std::int64_t archived_at_milliseconds,
+    const std::string& relative_path,
+    const std::function<void(BeginCompleteStatus)>& callback) const {
+    const std::string base = key_prefix_ + "upload:" + upload_id;
+    return redis_.createCommand(
+        "EVAL",
+        {kBeginCompleteScript, "2", base, base + ":chunks", std::to_string(chunk_count),
+         std::to_string(archived_at_milliseconds), relative_path},
+        timeout_ms_, [callback](WFRedisTask* task) {
+            std::int64_t result = 0;
+            if (!redisInteger(task, &result)) {
+                callback(BeginCompleteStatus::Unavailable);
+            } else if (result == 0) {
+                callback(BeginCompleteStatus::Ready);
+            } else if (result == 1) {
+                callback(BeginCompleteStatus::Resumable);
+            } else if (result == 2) {
+                callback(BeginCompleteStatus::Archived);
+            } else if (result == 3) {
+                callback(BeginCompleteStatus::Failed);
+            } else if (result == 4) {
+                callback(BeginCompleteStatus::ChunksIncomplete);
+            } else {
+                callback(BeginCompleteStatus::NotFound);
+            }
+        });
+}
+
+WFRedisTask* UploadRepository::createMarkFailedTask(
+    const UploadSession& session, const std::string& failure_code,
+    const std::function<void(bool)>& callback) const {
+    const std::string root = key_prefix_ + "upload:";
+    const std::string base = root + session.upload_id;
+    const std::int64_t expires_at = currentUnixSeconds() + terminal_ttl_seconds_;
+    const std::string member = session.upload_id + ":" + std::to_string(session.file_size);
+    std::vector<std::string> params{kMarkFailedScript,
+                                    "6",
+                                    base,
+                                    base + ":chunks",
+                                    base + ":digests",
+                                    root + "quota:global",
+                                    root + "quota:device:" + session.device_id,
+                                    root + "quota:collector:" + session.collector_id,
+                                    failure_code,
+                                    std::to_string(terminal_ttl_seconds_),
+                                    std::to_string(expires_at),
+                                    member};
+    return redis_.createCommand("EVAL", params, timeout_ms_, [callback](WFRedisTask* task) {
+        std::int64_t result = 0;
+        callback(redisInteger(task, &result) && result == 1);
+    });
+}
+
+WFRedisTask* UploadRepository::createMarkArchivedTask(
+    const UploadSession& session, std::uint64_t archive_id, std::int64_t archived_at_milliseconds,
+    const std::string& relative_path, const std::function<void(bool)>& callback) const {
+    const std::string root = key_prefix_ + "upload:";
+    const std::string base = root + session.upload_id;
+    const std::string member = session.upload_id + ":" + std::to_string(session.file_size);
+    std::vector<std::string> params{kMarkArchivedScript,
+                                    "6",
+                                    base,
+                                    base + ":chunks",
+                                    base + ":digests",
+                                    root + "quota:global",
+                                    root + "quota:device:" + session.device_id,
+                                    root + "quota:collector:" + session.collector_id,
+                                    std::to_string(archive_id),
+                                    std::to_string(archived_at_milliseconds),
+                                    relative_path,
+                                    std::to_string(terminal_ttl_seconds_),
+                                    member};
+    return redis_.createCommand("EVAL", params, timeout_ms_, [callback](WFRedisTask* task) {
+        std::int64_t result = 0;
+        callback(redisInteger(task, &result) && result == 1);
+    });
 }
 
 bool bitmapContains(const std::string& bitmap, std::size_t chunk_no) {

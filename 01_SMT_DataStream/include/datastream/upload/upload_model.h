@@ -43,15 +43,23 @@ struct UploadSession {
     std::string station_id;
     std::string line_id;
     std::string collector_id;
+    std::string work_order;
+    std::string product_sn;
     std::string file_type;
+    std::string result;
     std::string original_filename;
+    std::string extension;
     std::string temp_path;
+    std::string relative_path;
+    std::string produced_at;
     std::uint64_t file_size;
     std::string file_sha256;
     std::size_t chunk_size;
     std::size_t chunk_count;
     std::int64_t expires_at_seconds;
     std::string failure_code;
+    std::uint64_t archive_id;
+    std::int64_t archived_at_milliseconds;
 };
 
 /// @brief 严格解析创建上传会话 JSON。

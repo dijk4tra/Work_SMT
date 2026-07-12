@@ -8,6 +8,7 @@
 
 #include <wfrest/HttpServer.h>
 
+#include "datastream/archive/archive_repository.h"
 #include "datastream/auth/device_authenticator.h"
 #include "datastream/config/app_config.h"
 #include "datastream/device/device_repository.h"
@@ -24,11 +25,13 @@ class UploadController {
     /// @param authenticator 设备认证器。
     /// @param device_repository 设备与采集器绑定仓储。
     /// @param upload_repository Redis 上传会话仓储。
+    /// @param archive_repository MySQL 归档元数据仓储。
     /// @param storage 文件存储目录。
     /// @param config 完整应用配置。
     UploadController(const DeviceAuthenticator& authenticator,
                      const DeviceRepository& device_repository,
-                     const UploadRepository& upload_repository, const StoragePaths& storage,
+                     const UploadRepository& upload_repository,
+                     const ArchiveRepository& archive_repository, const StoragePaths& storage,
                      const AppConfig& config);
 
     /// @brief 注册创建会话、上传分片和查询进度路由。
@@ -39,6 +42,7 @@ class UploadController {
     const DeviceAuthenticator& authenticator_;
     const DeviceRepository& device_repository_;
     const UploadRepository& upload_repository_;
+    const ArchiveRepository& archive_repository_;
     const StoragePaths& storage_;
     UploadConfig config_;
     std::size_t body_limit_bytes_;

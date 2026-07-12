@@ -49,6 +49,10 @@ TEST(ApiResponseTest, MapsDeviceAuthenticationFailures) {
     EXPECT_EQ(httpStatus(ErrorCode::FileTooLarge), 413);
     EXPECT_EQ(httpStatus(ErrorCode::UploadLimitExceeded), 429);
     EXPECT_EQ(httpStatus(ErrorCode::StorageCapacityExceeded), 507);
+    EXPECT_EQ(httpStatus(ErrorCode::ChunksIncomplete), 409);
+    EXPECT_EQ(httpStatus(ErrorCode::FileIntegrityMismatch), 422);
+    EXPECT_EQ(httpStatus(ErrorCode::InvalidCursor), 400);
+    EXPECT_EQ(httpStatus(ErrorCode::ArchiveNotFound), 404);
 }
 
 TEST(ApiResponseTest, GeneratesDistinctServerRequestIds) {

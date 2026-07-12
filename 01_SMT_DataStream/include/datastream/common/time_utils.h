@@ -37,6 +37,17 @@ bool parseIso8601Milliseconds(const std::string& value, std::int64_t* unix_milli
 /// @return 毫秒精度且以 Z 结尾的 UTC 时间。
 std::string formatUtcMilliseconds(std::int64_t unix_milliseconds);
 
+/// @brief 将 Unix 毫秒格式化为 MySQL DATETIME(3)。
+/// @param unix_milliseconds Unix 毫秒。
+/// @return 毫秒精度的 UTC MySQL 时间。
+std::string formatMysqlMilliseconds(std::int64_t unix_milliseconds);
+
+/// @brief 将 MySQL UTC DATETIME(3) 转换为 API UTC 时间。
+/// @param value MySQL 返回的 DATETIME(3) 字符串。
+/// @param iso8601 转换成功时接收 ISO 8601 字符串。
+/// @return 格式正确时返回 true。
+bool mysqlDateTimeToIso8601(const std::string& value, std::string* iso8601);
+
 }  // namespace datastream
 }  // namespace smt
 

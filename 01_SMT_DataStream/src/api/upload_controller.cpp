@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 
+#include "datastream/archive/archive_model.h"
+#include "datastream/archive/archive_storage.h"
 #include "datastream/common/api_response.h"
 #include "datastream/common/request_id.h"
 #include "datastream/common/time_utils.h"
@@ -59,6 +61,32 @@ struct ProgressState {
     ErrorCode code;
     std::string message;
 };
+
+/// @brief 保存完成上传异步链状态。
+struct CompleteState {
+    DeviceAuthResult auth;
+    UploadSession session;
+    ArchiveRecord record;
+    std::string upload_id;
+    ErrorCode code;
+    std::string message;
+    bool completed;
+};
+
+void pushMarkArchived(const UploadRepository& repository,
+                      const std::shared_ptr<CompleteState>& state, SeriesWork* series) {
+    WFRedisTask* task = repository.createMarkArchivedTask(
+        state->session, state->record.archive_id, state->record.archived_at_milliseconds,
+        state->record.relative_path, [state](bool saved) {
+            if (!saved) {
+                state->code = ErrorCode::RedisUnavailable;
+                state->message = "Redis is unavailable";
+                return;
+            }
+            state->completed = true;
+        });
+    series->push_front(task);
+}
 
 bool parseDecimal(const std::string& value, std::uint64_t* result) {
     if (value.empty()) {
@@ -157,10 +185,12 @@ void setLookupError(SessionLookupStatus status, ErrorCode* code, std::string* me
 UploadController::UploadController(const DeviceAuthenticator& authenticator,
                                    const DeviceRepository& device_repository,
                                    const UploadRepository& upload_repository,
+                                   const ArchiveRepository& archive_repository,
                                    const StoragePaths& storage, const AppConfig& config)
     : authenticator_(authenticator),
       device_repository_(device_repository),
       upload_repository_(upload_repository),
+      archive_repository_(archive_repository),
       storage_(storage),
       config_(config.upload),
       body_limit_bytes_(config.http.request_body_limit_bytes) {}
@@ -214,10 +244,16 @@ void UploadController::registerRoutes(wfrest::HttpServer& server) {
                 state->session.station_id = auth.identity.station_id;
                 state->session.line_id = auth.identity.line_id;
                 state->session.collector_id = state->metadata.collector_id;
+                state->session.work_order = state->metadata.work_order;
+                state->session.product_sn = state->metadata.product_sn;
                 state->session.file_type = state->metadata.file_type;
+                state->session.result = state->metadata.result;
                 state->session.original_filename = state->metadata.original_filename;
+                state->session.extension = state->metadata.extension;
                 state->session.temp_path =
                     storage_.tempRoot() + "/" + state->session.upload_id + ".part";
+                state->session.relative_path.clear();
+                state->session.produced_at = state->metadata.produced_at;
                 state->session.file_size = state->metadata.file_size;
                 state->session.file_sha256 = state->metadata.file_sha256;
                 state->session.chunk_size = state->metadata.chunk_size;
@@ -225,6 +261,8 @@ void UploadController::registerRoutes(wfrest::HttpServer& server) {
                 state->session.expires_at_seconds =
                     currentUnixSeconds() + config_.session_ttl_seconds;
                 state->session.failure_code.clear();
+                state->session.archive_id = 0;
+                state->session.archived_at_milliseconds = 0;
 
                 WFMySQLTask* binding = device_repository_.createBindingCheckTask(
                     state->metadata.collector_id, auth.identity.device_id,
@@ -498,6 +536,232 @@ void UploadController::registerRoutes(wfrest::HttpServer& server) {
                                  state->session.failure_code.empty()
                                      ? nlohmann::json(nullptr)
                                      : nlohmann::json(state->session.failure_code)}});
+                    });
+                series->push_back(lookup);
+                series->push_back(finish);
+            });
+    });
+
+    server.POST("/api/v1/uploads/{upload_id}/complete", [this](const wfrest::HttpReq* request,
+                                                               wfrest::HttpResp* response,
+                                                               SeriesWork* series) {
+        authenticator_.authenticate(
+            *request, *series, [this, request, response, series](const DeviceAuthResult& auth) {
+                if (auth.code != ErrorCode::Ok) {
+                    sendApiResponse(response, auth.code, auth.message, auth.request_id, nullptr);
+                    return;
+                }
+                if (!request->body().empty() || !isUuid(request->param("upload_id"))) {
+                    sendApiResponse(response, ErrorCode::InvalidArgument,
+                                    "complete request is invalid", auth.request_id, nullptr);
+                    return;
+                }
+                const std::shared_ptr<CompleteState> state(new CompleteState());
+                state->auth = auth;
+                state->upload_id = request->param("upload_id");
+                state->code = ErrorCode::Ok;
+                state->message = "success";
+                state->completed = false;
+
+                WFRedisTask* lookup = upload_repository_.createSessionLookupTask(
+                    state->upload_id, [this, state, series](SessionLookupStatus status,
+                                                            const UploadSession& session) {
+                        if (status != SessionLookupStatus::Found) {
+                            setLookupError(status, &state->code, &state->message);
+                            return;
+                        }
+                        state->session = session;
+                        if (session.device_id != state->auth.identity.device_id) {
+                            state->code = ErrorCode::UploadDeviceMismatch;
+                            state->message = "upload session belongs to another device";
+                            return;
+                        }
+                        if (session.state == "FAILED") {
+                            state->code = ErrorCode::UploadStateConflict;
+                            state->message = "upload session has failed";
+                            return;
+                        }
+                        if (session.state == "ARCHIVED") {
+                            if (session.archive_id == 0 || session.archived_at_milliseconds == 0) {
+                                state->code = ErrorCode::RedisUnavailable;
+                                state->message = "Redis upload state is invalid";
+                                return;
+                            }
+                            state->record.archive_id = session.archive_id;
+                            state->record.upload_id = session.upload_id;
+                            state->record.archived_at_milliseconds =
+                                session.archived_at_milliseconds;
+                            state->record.archived_at =
+                                formatUtcMilliseconds(session.archived_at_milliseconds);
+                            state->completed = true;
+                            return;
+                        }
+                        const ServerTime now = currentServerTime();
+                        std::int64_t now_milliseconds = 0;
+                        parseIso8601Milliseconds(now.iso8601, &now_milliseconds);
+                        const std::int64_t archived_at = session.state == "VERIFYING"
+                                                             ? session.archived_at_milliseconds
+                                                             : now_milliseconds;
+                        const std::string relative =
+                            session.state == "VERIFYING"
+                                ? session.relative_path
+                                : buildArchiveRelativePath(session, archived_at);
+                        if (archived_at == 0 || relative.empty()) {
+                            state->code = ErrorCode::RedisUnavailable;
+                            state->message = "Redis upload state is invalid";
+                            return;
+                        }
+                        WFRedisTask* begin = upload_repository_.createBeginCompleteTask(
+                            session.upload_id, session.chunk_count, archived_at, relative,
+                            [this, state, series, archived_at,
+                             relative](BeginCompleteStatus begin_status) {
+                                if (begin_status == BeginCompleteStatus::ChunksIncomplete) {
+                                    state->code = ErrorCode::ChunksIncomplete;
+                                    state->message = "upload chunks are incomplete";
+                                    return;
+                                }
+                                if (begin_status == BeginCompleteStatus::NotFound) {
+                                    state->code = ErrorCode::UploadNotFound;
+                                    state->message = "upload session was not found";
+                                    return;
+                                }
+                                if (begin_status == BeginCompleteStatus::Unavailable) {
+                                    state->code = ErrorCode::RedisUnavailable;
+                                    state->message = "Redis is unavailable";
+                                    return;
+                                }
+                                if (begin_status == BeginCompleteStatus::Failed) {
+                                    state->code = ErrorCode::UploadStateConflict;
+                                    state->message = "upload session has failed";
+                                    return;
+                                }
+                                state->session.state = "VERIFYING";
+                                state->session.archived_at_milliseconds = archived_at;
+                                state->session.relative_path = relative;
+                                WFMySQLTask* existing = archive_repository_.createFindByUploadTask(
+                                    state->upload_id,
+                                    [this, state, series](ArchiveLookupStatus archive_status,
+                                                          const ArchiveRecord& record) {
+                                        if (archive_status == ArchiveLookupStatus::Found) {
+                                            state->record = record;
+                                            pushMarkArchived(upload_repository_, state, series);
+                                            return;
+                                        }
+                                        if (archive_status == ArchiveLookupStatus::Unavailable) {
+                                            state->code = ErrorCode::MySqlUnavailable;
+                                            state->message = "MySQL is unavailable";
+                                            return;
+                                        }
+                                        WFGoTask* archive = WFTaskFactory::create_go_task(
+                                            "datastream-complete-" + state->upload_id,
+                                            [this, state]() {
+                                                const ArchiveStorageResult result =
+                                                    verifyAndArchiveFile(
+                                                        storage_, state->session,
+                                                        state->session.relative_path,
+                                                        config_.hash_mmap_window_bytes);
+                                                if (result.status ==
+                                                    ArchiveStorageStatus::IntegrityMismatch) {
+                                                    state->code = ErrorCode::FileIntegrityMismatch;
+                                                    state->message =
+                                                        "file size or SHA-256 does not match";
+                                                } else if (result.status ==
+                                                           ArchiveStorageStatus::IoError) {
+                                                    state->code = ErrorCode::StorageIoError;
+                                                    state->message =
+                                                        "cannot verify or archive file";
+                                                } else {
+                                                    state->record = makeArchiveRecord(
+                                                        state->session, result.relative_path,
+                                                        state->session.archived_at_milliseconds);
+                                                }
+                                            });
+                                        archive->set_callback([this, state, series](WFGoTask*) {
+                                            if (state->code == ErrorCode::FileIntegrityMismatch) {
+                                                WFRedisTask* failed =
+                                                    upload_repository_.createMarkFailedTask(
+                                                        state->session, "FILE_INTEGRITY_MISMATCH",
+                                                        [state](bool saved) {
+                                                            if (!saved) {
+                                                                state->code =
+                                                                    ErrorCode::RedisUnavailable;
+                                                                state->message =
+                                                                    "Redis is unavailable";
+                                                            }
+                                                        });
+                                                series->push_front(failed);
+                                                return;
+                                            }
+                                            if (state->code != ErrorCode::Ok) {
+                                                return;
+                                            }
+                                            WFMySQLTask* insert =
+                                                archive_repository_.createInsertTask(
+                                                    state->record,
+                                                    [this, state, series](
+                                                        ArchiveInsertStatus insert_status,
+                                                        std::uint64_t archive_id) {
+                                                        if (insert_status ==
+                                                            ArchiveInsertStatus::Inserted) {
+                                                            state->record.archive_id = archive_id;
+                                                            pushMarkArchived(upload_repository_,
+                                                                             state, series);
+                                                            return;
+                                                        }
+                                                        if (insert_status ==
+                                                            ArchiveInsertStatus::Unavailable) {
+                                                            state->code =
+                                                                ErrorCode::MySqlUnavailable;
+                                                            state->message = "MySQL is unavailable";
+                                                            return;
+                                                        }
+                                                        WFMySQLTask* conflict =
+                                                            archive_repository_
+                                                                .createFindByUploadTask(
+                                                                    state->upload_id,
+                                                                    [this, state, series](
+                                                                        ArchiveLookupStatus status,
+                                                                        const ArchiveRecord&
+                                                                            existing_record) {
+                                                                        if (status ==
+                                                                            ArchiveLookupStatus::
+                                                                                Found) {
+                                                                            state->record =
+                                                                                existing_record;
+                                                                            pushMarkArchived(
+                                                                                upload_repository_,
+                                                                                state, series);
+                                                                        } else {
+                                                                            state
+                                                                                ->code = ErrorCode::
+                                                                                MySqlUnavailable;
+                                                                            state->message =
+                                                                                "cannot resolve "
+                                                                                "archive conflict";
+                                                                        }
+                                                                    });
+                                                        series->push_front(conflict);
+                                                    });
+                                            series->push_front(insert);
+                                        });
+                                        series->push_front(archive);
+                                    });
+                                series->push_front(existing);
+                            });
+                        series->push_front(begin);
+                    });
+                WFTimerTask* finish =
+                    WFTaskFactory::create_timer_task(0, 0, [state, response](WFTimerTask*) {
+                        if (!state->completed) {
+                            sendApiResponse(response, state->code, state->message,
+                                            state->auth.request_id, nullptr);
+                            return;
+                        }
+                        sendApiResponse(response, ErrorCode::Ok, "success", state->auth.request_id,
+                                        nlohmann::json{{"archive_id", state->record.archive_id},
+                                                       {"upload_id", state->upload_id},
+                                                       {"state", "ARCHIVED"},
+                                                       {"archived_at", state->record.archived_at}});
                     });
                 series->push_back(lookup);
                 series->push_back(finish);

@@ -35,6 +35,13 @@ TEST(TimeUtilsTest, ProducesUtcApiAndMysqlFormats) {
     EXPECT_EQ(now.mysql.size(), 23U);
 }
 
+TEST(TimeUtilsTest, ConvertsMysqlDatetimeWithoutSessionTimezone) {
+    std::string iso8601;
+    ASSERT_TRUE(mysqlDateTimeToIso8601("2026-07-11 00:00:00.123", &iso8601));
+    EXPECT_EQ(iso8601, "2026-07-11T00:00:00.123Z");
+    EXPECT_FALSE(mysqlDateTimeToIso8601("2026-07-11 00:00:00", &iso8601));
+}
+
 }  // namespace
 }  // namespace datastream
 }  // namespace smt

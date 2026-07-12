@@ -104,5 +104,26 @@ std::string formatUtcMilliseconds(std::int64_t unix_milliseconds) {
     return output;
 }
 
+std::string formatMysqlMilliseconds(std::int64_t unix_milliseconds) {
+    std::string value = formatUtcMilliseconds(unix_milliseconds);
+    value[10] = ' ';
+    value.resize(value.size() - 1);
+    return value;
+}
+
+bool mysqlDateTimeToIso8601(const std::string& value, std::string* iso8601) {
+    static const std::regex pattern(
+        "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:"
+        "[0-9]{2}\\.[0-9]{3}$");
+    if (!std::regex_match(value, pattern)) {
+        return false;
+    }
+    *iso8601 = value;
+    (*iso8601)[10] = 'T';
+    iso8601->push_back('Z');
+    std::int64_t milliseconds = 0;
+    return parseIso8601Milliseconds(*iso8601, &milliseconds);
+}
+
 }  // namespace datastream
 }  // namespace smt

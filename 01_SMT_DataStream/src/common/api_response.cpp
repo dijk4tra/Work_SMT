@@ -48,6 +48,14 @@ const char* errorCodeName(ErrorCode code) {
             return "UPLOAD_LIMIT_EXCEEDED";
         case ErrorCode::StorageCapacityExceeded:
             return "STORAGE_CAPACITY_EXCEEDED";
+        case ErrorCode::ChunksIncomplete:
+            return "CHUNKS_INCOMPLETE";
+        case ErrorCode::FileIntegrityMismatch:
+            return "FILE_INTEGRITY_MISMATCH";
+        case ErrorCode::InvalidCursor:
+            return "INVALID_CURSOR";
+        case ErrorCode::ArchiveNotFound:
+            return "ARCHIVE_NOT_FOUND";
         case ErrorCode::OperatorTokenInvalid:
             return "OPERATOR_TOKEN_INVALID";
         case ErrorCode::ServiceNotReady:
@@ -67,6 +75,7 @@ int httpStatus(ErrorCode code) {
         case ErrorCode::Ok:
             return 200;
         case ErrorCode::InvalidArgument:
+        case ErrorCode::InvalidCursor:
             return 400;
         case ErrorCode::AuthRequired:
         case ErrorCode::SignatureInvalid:
@@ -79,10 +88,12 @@ int httpStatus(ErrorCode code) {
             return 403;
         case ErrorCode::DeviceNotFound:
         case ErrorCode::UploadNotFound:
+        case ErrorCode::ArchiveNotFound:
             return 404;
         case ErrorCode::RequestReplayed:
         case ErrorCode::UploadStateConflict:
         case ErrorCode::ChunkContentConflict:
+        case ErrorCode::ChunksIncomplete:
             return 409;
         case ErrorCode::FileTooLarge:
         case ErrorCode::ChunkTooLarge:
@@ -91,6 +102,8 @@ int httpStatus(ErrorCode code) {
             return 429;
         case ErrorCode::StorageCapacityExceeded:
             return 507;
+        case ErrorCode::FileIntegrityMismatch:
+            return 422;
         case ErrorCode::StorageIoError:
             return 500;
         case ErrorCode::ServiceNotReady:

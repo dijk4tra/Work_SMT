@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""使用真实 HTTP、Redis、MySQL 和临时文件验证第三期上传链路。"""
+"""使用真实 HTTP、Redis、MySQL 和文件系统验证上传、归档与查询链路。"""
 
 import hashlib
 import hmac
@@ -14,6 +14,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import urlencode
 
 
 def redis(*arguments):
@@ -24,6 +25,19 @@ def redis(*arguments):
         capture_output=True,
         text=True,
     ).stdout.strip()
+
+
+def mysql_execute(statement, environment):
+    """执行测试限定的 MySQL 清理或故障窗口构造语句。"""
+    mysql_environment = environment.copy()
+    mysql_environment["MYSQL_PWD"] = environment["SMT_DATASTREAM_MYSQL_PASSWORD"]
+    subprocess.run(
+        ["mysql", "-h", "127.0.0.1", "-u", "root", "smt_datastream", "-e", statement],
+        check=True,
+        env=mysql_environment,
+        capture_output=True,
+        text=True,
+    )
 
 
 def free_port():
@@ -104,7 +118,7 @@ def create_body(file_size, digest, collector="IPC-L01-01"):
 
 
 def main():
-    """运行创建、乱序、幂等、冲突、进度、授权和配额用例。"""
+    """运行分片、完成、幂等归档、查询、授权和配额用例。"""
     server = Path(sys.argv[1]).resolve()
     source_config = Path(sys.argv[2]).resolve()
     environment = os.environ.copy()
@@ -118,10 +132,19 @@ def main():
         config["redis"]["key_prefix"] = f"smt:test:upload:{os.getpid()}:"
         config["upload"]["temp_root"] = str(root / "upload")
         config["upload"]["archive_root"] = str(root / "archive")
+        config["cleanup"]["interval_seconds"] = 1
+        config["cleanup"]["expired_retention_seconds"] = 1
         config["logging"]["file"] = str(root / "datastream.log")
         config_path = root / "config.json"
         config_path.write_text(json.dumps(config), encoding="utf-8")
         port = config["http"]["port"]
+        (root / "upload").mkdir()
+        orphan = root / "upload" / "123e4567-e89b-42d3-a456-426614174099.part"
+        unknown = root / "upload" / "manual.part"
+        orphan.write_bytes(b"old orphan")
+        unknown.write_bytes(b"must be preserved")
+        os.utime(orphan, (1, 1))
+        os.utime(unknown, (1, 1))
         process = subprocess.Popen(
             [str(server), "--config", str(config_path)],
             env=environment,
@@ -130,8 +153,14 @@ def main():
             text=True,
         )
         upload_ids = []
+        archive_ids = []
         try:
             wait_ready(port, process)
+            cleanup_deadline = time.time() + 3
+            while orphan.exists() and time.time() < cleanup_deadline:
+                time.sleep(0.05)
+            assert not orphan.exists()
+            assert unknown.exists()
             content = (b"AOI-NG-E2E-" * 220000)[:2300000]
             digest = hashlib.sha256(content).hexdigest()
             create_path = "/api/v1/uploads"
@@ -243,6 +272,147 @@ def main():
             )
             assert_code(request(port, "POST", create_path, body, third_headers), 429,
                         "UPLOAD_LIMIT_EXCEEDED")
+
+            incomplete_path = f"/api/v1/uploads/{second_id}/complete"
+            incomplete_headers = signed_headers(
+                "POST", incomplete_path, "AOI-VT-01", "smt-dev-aoi-vt-01", b"",
+                "UPLOAD_COMPLETE_INCOMPLETE_01"
+            )
+            assert_code(request(port, "POST", incomplete_path, b"", incomplete_headers), 409,
+                        "CHUNKS_INCOMPLETE")
+
+            complete_path = f"/api/v1/uploads/{upload_id}/complete"
+            complete_headers = signed_headers(
+                "POST", complete_path, "AOI-VT-01", "smt-dev-aoi-vt-01", b"",
+                "UPLOAD_COMPLETE_E2E_0001"
+            )
+            completed = request(port, "POST", complete_path, b"", complete_headers)
+            assert_code(completed, 200, "OK")
+            archive_id = completed[1]["data"]["archive_id"]
+            archive_ids.append(archive_id)
+            assert not temporary_file.exists()
+
+            mysql_execute(
+                f"DELETE FROM archive_file WHERE archive_id={archive_id}", environment
+            )
+            redis("HSET", config["redis"]["key_prefix"] + "upload:" + upload_id,
+                  "state", "VERIFYING")
+
+            repeat_headers = signed_headers(
+                "POST", complete_path, "AOI-VT-01", "smt-dev-aoi-vt-01", b"",
+                "UPLOAD_COMPLETE_E2E_0002"
+            )
+            repeated = request(port, "POST", complete_path, b"", repeat_headers)
+            assert_code(repeated, 200, "OK")
+            archive_id = repeated[1]["data"]["archive_id"]
+            archive_ids.append(archive_id)
+
+            redis("HSET", config["redis"]["key_prefix"] + "upload:" + upload_id,
+                  "state", "VERIFYING")
+            redis_repair_headers = signed_headers(
+                "POST", complete_path, "AOI-VT-01", "smt-dev-aoi-vt-01", b"",
+                "UPLOAD_COMPLETE_E2E_0004"
+            )
+            redis_repaired = request(
+                port, "POST", complete_path, b"", redis_repair_headers
+            )
+            assert_code(redis_repaired, 200, "OK")
+            assert redis_repaired[1]["data"]["archive_id"] == archive_id
+
+            final_chunk_path = f"/api/v1/uploads/{second_id}/chunks/2"
+            final_chunk_headers = signed_headers(
+                "PUT", final_chunk_path, "AOI-VT-01", "smt-dev-aoi-vt-01", chunks[2],
+                "UPLOAD_CONCURRENT_E2E_02", "application/octet-stream"
+            )
+            assert_code(request(port, "PUT", final_chunk_path, chunks[2], final_chunk_headers),
+                        200, "OK")
+            second_complete_headers = signed_headers(
+                "POST", incomplete_path, "AOI-VT-01", "smt-dev-aoi-vt-01", b"",
+                "UPLOAD_COMPLETE_E2E_0003"
+            )
+            second_completed = request(
+                port, "POST", incomplete_path, b"", second_complete_headers
+            )
+            assert_code(second_completed, 200, "OK")
+            second_archive_id = second_completed[1]["data"]["archive_id"]
+            archive_ids.append(second_archive_id)
+
+            query_path = "/api/v1/archives?" + urlencode(
+                {
+                    "device_id": "AOI-VT-01",
+                    "work_order": "WO-E2E-UPLOAD",
+                    "archived_from": "2026-07-01T00:00:00.000Z",
+                    "archived_to": "2026-07-31T23:59:59.999Z",
+                    "page_size": "1",
+                }
+            )
+            operator_headers = {
+                "Authorization": f"Bearer {environment['SMT_DATASTREAM_OPERATOR_TOKEN']}"
+            }
+            archives = request(port, "GET", query_path, b"", operator_headers)
+            assert_code(archives, 200, "OK")
+            assert len(archives[1]["data"]["items"]) == 1
+            assert archives[1]["data"]["next_cursor"] is not None
+            first_page_id = archives[1]["data"]["items"][0]["archive_id"]
+            next_path = query_path + "&" + urlencode(
+                {"cursor": archives[1]["data"]["next_cursor"]}
+            )
+            next_page = request(port, "GET", next_path, b"", operator_headers)
+            assert_code(next_page, 200, "OK")
+            assert len(next_page[1]["data"]["items"]) == 1, next_page
+            second_page_id = next_page[1]["data"]["items"][0]["archive_id"]
+            assert {first_page_id, second_page_id} == {archive_id, second_archive_id}
+            assert next_page[1]["data"]["next_cursor"] is None
+
+            detail_path = f"/api/v1/archives/{archive_id}"
+            detail = request(port, "GET", detail_path, b"", operator_headers)
+            assert_code(detail, 200, "OK")
+            assert detail[1]["data"]["upload_id"] == upload_id
+            assert detail[1]["data"]["file_sha256"] == digest
+            archived_file = root / "archive" / detail[1]["data"]["relative_path"]
+            assert hashlib.sha256(archived_file.read_bytes()).hexdigest() == digest
+
+            mismatch_body = create_body(len(content), "0" * 64)
+            mismatch_created = request(
+                port, "POST", create_path, mismatch_body,
+                signed_headers(
+                    "POST", create_path, "AOI-VT-01", "smt-dev-aoi-vt-01", mismatch_body,
+                    "UPLOAD_MISMATCH_CREATE_01", "application/json"
+                ),
+            )
+            assert_code(mismatch_created, 201, "OK")
+            mismatch_id = mismatch_created[1]["data"]["upload_id"]
+            upload_ids.append(mismatch_id)
+            for chunk_no, chunk in enumerate(chunks):
+                mismatch_chunk_path = f"/api/v1/uploads/{mismatch_id}/chunks/{chunk_no}"
+                mismatch_chunk = request(
+                    port, "PUT", mismatch_chunk_path, chunk,
+                    signed_headers(
+                        "PUT", mismatch_chunk_path, "AOI-VT-01", "smt-dev-aoi-vt-01", chunk,
+                        f"UPLOAD_MISMATCH_CHUNK_{chunk_no:02d}", "application/octet-stream"
+                    ),
+                )
+                assert_code(mismatch_chunk, 200, "OK")
+            mismatch_complete_path = f"/api/v1/uploads/{mismatch_id}/complete"
+            mismatch_complete = request(
+                port, "POST", mismatch_complete_path, b"",
+                signed_headers(
+                    "POST", mismatch_complete_path, "AOI-VT-01", "smt-dev-aoi-vt-01", b"",
+                    "UPLOAD_MISMATCH_COMPLETE_01"
+                ),
+            )
+            assert_code(mismatch_complete, 422, "FILE_INTEGRITY_MISMATCH")
+            mismatch_progress_path = f"/api/v1/uploads/{mismatch_id}"
+            mismatch_progress = request(
+                port, "GET", mismatch_progress_path, b"",
+                signed_headers(
+                    "GET", mismatch_progress_path, "AOI-VT-01", "smt-dev-aoi-vt-01", b"",
+                    "UPLOAD_MISMATCH_PROGRESS_01"
+                ),
+            )
+            assert_code(mismatch_progress, 200, "OK")
+            assert mismatch_progress[1]["data"]["state"] == "FAILED"
+            assert mismatch_progress[1]["data"]["failure_code"] == "FILE_INTEGRITY_MISMATCH"
         finally:
             process.send_signal(signal.SIGTERM)
             stdout, stderr = process.communicate(timeout=10)
@@ -251,6 +421,9 @@ def main():
                     f"server exit={process.returncode} stdout={stdout} stderr={stderr}"
                 )
             prefix = config["redis"]["key_prefix"]
+            for archive_id in archive_ids:
+                mysql_execute(f"DELETE FROM archive_file WHERE archive_id={archive_id}",
+                              environment)
             for upload_id in upload_ids:
                 redis("DEL", prefix + "upload:" + upload_id)
                 redis("DEL", prefix + "upload:" + upload_id + ":chunks")
@@ -267,6 +440,12 @@ def main():
                 "UPLOAD_WRONG_DEVICE_001", "UPLOAD_BAD_BINDING_0001",
                 "UPLOAD_CREATE_E2E_0002", "UPLOAD_CREATE_E2E_0003",
                 "UPLOAD_CONCURRENT_E2E_00", "UPLOAD_CONCURRENT_E2E_01",
+                "UPLOAD_COMPLETE_INCOMPLETE_01", "UPLOAD_COMPLETE_E2E_0001",
+                "UPLOAD_COMPLETE_E2E_0002", "UPLOAD_CONCURRENT_E2E_02",
+                "UPLOAD_COMPLETE_E2E_0003", "UPLOAD_COMPLETE_E2E_0004",
+                "UPLOAD_MISMATCH_CREATE_01", "UPLOAD_MISMATCH_CHUNK_00",
+                "UPLOAD_MISMATCH_CHUNK_01", "UPLOAD_MISMATCH_CHUNK_02",
+                "UPLOAD_MISMATCH_COMPLETE_01", "UPLOAD_MISMATCH_PROGRESS_01",
             ]:
                 redis("DEL", prefix + "auth:req:AOI-VT-01:" + request_id)
                 redis("DEL", prefix + "auth:req:SPI-ZM-01:" + request_id)

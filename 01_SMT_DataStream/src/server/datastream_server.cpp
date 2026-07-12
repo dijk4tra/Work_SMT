@@ -20,15 +20,21 @@ DataStreamServer::DataStreamServer(const AppConfig& config)
       device_authenticator_(device_repository_, redis_, config.auth, config.redis,
                             config.health.check_timeout_ms),
       operator_authenticator_(config.operator_auth.bearer_token),
-      upload_repository_(redis_, config.redis, config.upload, config.health.check_timeout_ms),
+      upload_repository_(redis_, config.redis, config.upload,
+                         config.cleanup.expired_retention_seconds, config.health.check_timeout_ms),
+      archive_repository_(mysql_, config.health.check_timeout_ms),
       health_controller_(mysql_, redis_, storage_, config.health.check_timeout_ms),
       heartbeat_controller_(device_authenticator_, device_repository_, redis_, config),
-      upload_controller_(device_authenticator_, device_repository_, upload_repository_, storage_,
-                         config),
+      upload_controller_(device_authenticator_, device_repository_, upload_repository_,
+                         archive_repository_, storage_, config),
+      archive_controller_(operator_authenticator_, archive_repository_, config.query),
+      cleanup_service_(redis_, config.redis, storage_, config.cleanup,
+                       config.health.check_timeout_ms),
       started_(false) {
     health_controller_.registerRoutes(http_server_);
     heartbeat_controller_.registerRoutes(http_server_);
     upload_controller_.registerRoutes(http_server_);
+    archive_controller_.registerRoutes(http_server_);
 }
 
 void DataStreamServer::initialize() {
@@ -39,6 +45,7 @@ void DataStreamServer::initialize() {
     if (!redis_.ping(config_.health.check_timeout_ms)) {
         throw std::runtime_error("Redis startup probe failed");
     }
+    cleanup_service_.start();
 }
 
 bool DataStreamServer::start() {
@@ -50,6 +57,7 @@ bool DataStreamServer::start() {
 void DataStreamServer::stop() {
     assert(started_);
     http_server_.stop();
+    cleanup_service_.stop();
     started_ = false;
 }
 

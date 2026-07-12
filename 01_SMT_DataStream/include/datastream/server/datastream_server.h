@@ -8,11 +8,14 @@
 
 #include <wfrest/HttpServer.h>
 
+#include "datastream/api/archive_controller.h"
 #include "datastream/api/health_controller.h"
 #include "datastream/api/heartbeat_controller.h"
 #include "datastream/api/upload_controller.h"
+#include "datastream/archive/archive_repository.h"
 #include "datastream/auth/device_authenticator.h"
 #include "datastream/auth/operator_authenticator.h"
+#include "datastream/cleanup/cleanup_service.h"
 #include "datastream/config/app_config.h"
 #include "datastream/device/device_repository.h"
 #include "datastream/storage/mysql_client.h"
@@ -52,9 +55,12 @@ class DataStreamServer {
     DeviceAuthenticator device_authenticator_;
     OperatorAuthenticator operator_authenticator_;
     UploadRepository upload_repository_;
+    ArchiveRepository archive_repository_;
     HealthController health_controller_;
     HeartbeatController heartbeat_controller_;
     UploadController upload_controller_;
+    ArchiveController archive_controller_;
+    CleanupService cleanup_service_;
     bool started_;
 };
 
