@@ -11,8 +11,8 @@ for name in "${required[@]}"; do
     fi
 done
 
-"$project_root/scripts/db.sh" migrate --config "$project_root/conf/datastream.example.json"
-"$project_root/scripts/db.sh" seed --config "$project_root/conf/datastream.example.json"
+"$project_root/scripts/db.sh" migrate --config "$project_root/conf/datastream.json"
+"$project_root/scripts/db.sh" seed --config "$project_root/conf/datastream.json"
 "$project_root/scripts/build.sh" debug
 ctest --test-dir "$project_root/build-debug" --output-on-failure
 "$project_root/scripts/build.sh" release

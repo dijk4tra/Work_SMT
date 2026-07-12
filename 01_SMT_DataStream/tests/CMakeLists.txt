@@ -25,7 +25,7 @@ target_link_libraries(
 target_compile_options(datastream_unit_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_compile_definitions(
     datastream_unit_tests
-    PRIVATE DATASTREAM_TEST_CONFIG_PATH="${CMAKE_SOURCE_DIR}/conf/datastream.example.json"
+    PRIVATE DATASTREAM_TEST_CONFIG_PATH="${CMAKE_SOURCE_DIR}/conf/datastream.json"
 )
 gtest_discover_tests(datastream_unit_tests DISCOVERY_MODE PRE_TEST)
 
@@ -36,7 +36,7 @@ if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
     target_compile_options(datastream_integration_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_definitions(
         datastream_integration_tests
-        PRIVATE DATASTREAM_TEST_CONFIG_PATH="${CMAKE_SOURCE_DIR}/conf/datastream.example.json"
+        PRIVATE DATASTREAM_TEST_CONFIG_PATH="${CMAKE_SOURCE_DIR}/conf/datastream.json"
     )
     gtest_discover_tests(
         datastream_integration_tests
@@ -48,7 +48,7 @@ if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
         NAME HeartbeatE2ETest
         COMMAND
             ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/e2e/heartbeat_e2e_test.py
-            $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
+            $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.json
     )
     set_tests_properties(HeartbeatE2ETest PROPERTIES LABELS integration TIMEOUT 30)
 
@@ -56,7 +56,7 @@ if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
         NAME UploadE2ETest
         COMMAND
             ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/e2e/upload_e2e_test.py
-            $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
+            $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.json
     )
     set_tests_properties(UploadE2ETest PROPERTIES LABELS integration TIMEOUT 60)
 
@@ -64,7 +64,7 @@ if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
         NAME MockArchiveE2ETest
         COMMAND
             ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/e2e/mock_archive_e2e_test.py
-            $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
+            $<TARGET_FILE:datastream_server> ${CMAKE_SOURCE_DIR}/conf/datastream.json
             ${CMAKE_SOURCE_DIR}/data/mock_inbox/run_20260711T142550760305Z_seed20260712
     )
     set_tests_properties(MockArchiveE2ETest PROPERTIES LABELS integration TIMEOUT 180)
@@ -75,7 +75,7 @@ if(DATASTREAM_ENABLE_INTEGRATION_TESTS)
             ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/e2e/collector_e2e_test.py
             $<TARGET_FILE:datastream_server> $<TARGET_FILE:collector_agent>
             ${CMAKE_SOURCE_DIR}/tools/simulate_device_lifecycle.py
-            ${CMAKE_SOURCE_DIR}/conf/datastream.example.json
+            ${CMAKE_SOURCE_DIR}/conf/datastream.json
     )
     set_tests_properties(CollectorE2ETest PROPERTIES LABELS integration TIMEOUT 120)
 endif()

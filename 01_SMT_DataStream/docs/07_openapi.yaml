@@ -126,7 +126,7 @@ components:
       schema: {type: string, format: uuid}
   responses:
     Error:
-      description: 统一业务错误，稳定错误码见 API契约.md
+      description: 统一业务错误，稳定错误码见 06_API契约.md
       content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}
   schemas:
     Envelope:

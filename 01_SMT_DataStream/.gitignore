@@ -1,9 +1,13 @@
 /build/
 /build-*/
+/.cache/
+/bin/
 /logs/*
 !/logs/.gitkeep
 /data/upload_tmp/
 /data/archive/
+/data/device_inbox/
+/data/collector_spool/
 __pycache__/
 *.py[cod]
 *.swp
