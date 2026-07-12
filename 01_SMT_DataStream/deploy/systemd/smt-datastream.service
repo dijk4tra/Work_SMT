@@ -1,0 +1,25 @@
+[Unit]
+Description=SMT DataStream archive service
+After=network-online.target mysql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smt-datastream
+Group=smt-datastream
+EnvironmentFile=/etc/smt-datastream/datastream.env
+WorkingDirectory=/var/lib/smt-datastream
+ExecStart=/opt/smt-datastream/bin/datastream_server --config /etc/smt-datastream/datastream.json
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=35s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/smt-datastream /var/log/smt-datastream
+UMask=0027
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

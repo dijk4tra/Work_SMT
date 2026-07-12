@@ -1,0 +1,168 @@
+openapi: 3.0.3
+info:
+  title: SMT DataStream API
+  version: 1.0.0
+  description: SMT 检测设备心跳、分片上传、归档完成及历史查询接口。
+servers:
+  - url: https://localhost:8443
+paths:
+  /health/live:
+    get:
+      summary: 进程存活检查
+      responses:
+        '200': {description: 进程存活, content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}}
+  /health/ready:
+    get:
+      summary: MySQL、Redis 和存储就绪检查
+      responses:
+        '200': {description: 全部依赖就绪, content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/v1/devices/heartbeat:
+    post:
+      summary: 上报设备心跳
+      security: [{DeviceHmac: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Heartbeat'}
+      responses:
+        '200': {description: 心跳已保存, content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/v1/uploads:
+    post:
+      summary: 创建文件上传会话
+      security: [{DeviceHmac: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateUpload'}
+      responses:
+        '201': {description: 会话已创建, content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '507': {$ref: '#/components/responses/Error'}
+  /api/v1/uploads/{upload_id}:
+    parameters: [{$ref: '#/components/parameters/UploadId'}]
+    get:
+      summary: 查询上传进度和缺失分片
+      security: [{DeviceHmac: []}]
+      responses:
+        '200': {description: 上传进度, content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}}
+        '404': {$ref: '#/components/responses/Error'}
+  /api/v1/uploads/{upload_id}/chunks/{chunk_no}:
+    parameters:
+      - {$ref: '#/components/parameters/UploadId'}
+      - name: chunk_no
+        in: path
+        required: true
+        schema: {type: integer, minimum: 0}
+    put:
+      summary: 上传一个二进制分片
+      security: [{DeviceHmac: []}]
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: 分片已接受或幂等命中, content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}}
+        '409': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+  /api/v1/uploads/{upload_id}/complete:
+    parameters: [{$ref: '#/components/parameters/UploadId'}]
+    post:
+      summary: 校验并原子归档完整文件
+      security: [{DeviceHmac: []}]
+      responses:
+        '200': {description: 返回唯一 archive_id, content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /api/v1/archives:
+    get:
+      summary: 组合条件和稳定游标查询归档
+      security: [{OperatorToken: []}]
+      parameters:
+        - {name: device_id, in: query, schema: {type: string}}
+        - {name: station_id, in: query, schema: {type: string}}
+        - {name: work_order, in: query, schema: {type: string}}
+        - {name: product_sn, in: query, schema: {type: string}}
+        - {name: file_type, in: query, schema: {$ref: '#/components/schemas/FileType'}}
+        - {name: result, in: query, schema: {type: string, enum: [PASS, NG]}}
+        - {name: archived_from, in: query, schema: {type: string, format: date-time}}
+        - {name: archived_to, in: query, schema: {type: string, format: date-time}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        '200': {description: 归档摘要页, content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}}
+        '401': {$ref: '#/components/responses/Error'}
+  /api/v1/archives/{archive_id}:
+    get:
+      summary: 查询单条归档完整元数据
+      security: [{OperatorToken: []}]
+      parameters:
+        - name: archive_id
+          in: path
+          required: true
+          schema: {type: integer, format: int64, minimum: 1}
+      responses:
+        '200': {description: 归档详情, content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}}
+        '404': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    DeviceHmac:
+      type: apiKey
+      in: header
+      name: X-Signature
+      description: 同时必须发送 X-Device-Id、X-Timestamp、X-Request-Id、X-Content-SHA256。
+    OperatorToken: {type: http, scheme: bearer}
+  parameters:
+    UploadId:
+      name: upload_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  responses:
+    Error:
+      description: 统一业务错误，稳定错误码见 API契约.md
+      content: {application/json: {schema: {$ref: '#/components/schemas/Envelope'}}}
+  schemas:
+    Envelope:
+      type: object
+      required: [code, message, request_id, data]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        request_id: {type: string}
+        data: {nullable: true}
+    Heartbeat:
+      type: object
+      additionalProperties: false
+      required: [collector_id, software_version, runtime_status, work_order, reported_at]
+      properties:
+        collector_id: {type: string}
+        software_version: {type: string}
+        runtime_status: {type: string, enum: [RUNNING, IDLE, ALARM]}
+        work_order: {type: string, nullable: true}
+        reported_at: {type: string, format: date-time}
+    FileType:
+      type: string
+      enum: [DETECTION_RESULT, TEST_REPORT, NG_IMAGE, DEVICE_EXPORT, RUNTIME_LOG]
+    CreateUpload:
+      type: object
+      additionalProperties: false
+      required: [station_id, collector_id, work_order, product_sn, file_type, result, original_filename, file_size, file_sha256, chunk_size, produced_at]
+      properties:
+        station_id: {type: string}
+        collector_id: {type: string}
+        work_order: {type: string, nullable: true}
+        product_sn: {type: string, nullable: true}
+        file_type: {$ref: '#/components/schemas/FileType'}
+        result: {type: string, enum: [PASS, NG], nullable: true}
+        original_filename: {type: string, maxLength: 255}
+        file_size: {type: integer, format: int64, minimum: 1, maximum: 2147483648}
+        file_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        chunk_size: {type: integer, minimum: 1048576, maximum: 8388608}
+        produced_at: {type: string, format: date-time}

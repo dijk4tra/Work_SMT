@@ -46,7 +46,7 @@ std::string requireString(const Json& object, const char* key, const std::string
         throw ConfigError(context + "." + key + " must be a string");
     }
 
-    const std::string result = value.get<std::string>();
+    std::string result = value.get<std::string>();
     if (result.empty()) {
         throw ConfigError(context + "." + key + " must not be empty");
     }
@@ -243,7 +243,7 @@ AppConfig AppConfig::load(const std::string& path) {
              "max_collector_sessions", "max_reserved_bytes", "temp_root", "archive_root"},
             "upload");
         config.upload.session_ttl_seconds = static_cast<int>(
-            requireUnsigned(upload, "session_ttl_seconds", 60, 7 * 86400, "upload"));
+            requireUnsigned(upload, "session_ttl_seconds", 60, 7ULL * 86400, "upload"));
         config.upload.min_chunk_size_bytes = static_cast<std::size_t>(
             requireUnsigned(upload, "min_chunk_size_bytes", 1, 64ULL * 1024 * 1024, "upload"));
         config.upload.max_chunk_size_bytes = static_cast<std::size_t>(
@@ -285,7 +285,7 @@ AppConfig AppConfig::load(const std::string& path) {
         config.cleanup.interval_seconds =
             static_cast<int>(requireUnsigned(cleanup, "interval_seconds", 1, 86400, "cleanup"));
         config.cleanup.expired_retention_seconds = static_cast<int>(
-            requireUnsigned(cleanup, "expired_retention_seconds", 1, 30 * 86400, "cleanup"));
+            requireUnsigned(cleanup, "expired_retention_seconds", 1, 30ULL * 86400, "cleanup"));
 
         const Json& query = root.at("query");
         requireExactKeys(query, {"default_page_size", "max_page_size", "max_time_range_days"},
@@ -305,7 +305,7 @@ AppConfig AppConfig::load(const std::string& path) {
         config.logging.level = requireString(logging, "level", "logging");
         config.logging.file = requireString(logging, "file", "logging");
         config.logging.max_file_size_bytes = static_cast<std::size_t>(requireUnsigned(
-            logging, "max_file_size_bytes", 1024 * 1024, 1024ULL * 1024 * 1024, "logging"));
+            logging, "max_file_size_bytes", 1024ULL * 1024, 1024ULL * 1024 * 1024, "logging"));
         config.logging.max_files =
             static_cast<std::size_t>(requireUnsigned(logging, "max_files", 1, 100, "logging"));
         validateLogLevel(config.logging.level);

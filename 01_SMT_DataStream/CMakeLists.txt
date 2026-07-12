@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(SMTDataStream VERSION 0.5.0 LANGUAGES CXX)
+project(SMTDataStream VERSION 1.0.0 LANGUAGES CXX)
 
 option(DATASTREAM_BUILD_TESTS "Build unit tests" ON)
 option(DATASTREAM_ENABLE_INTEGRATION_TESTS "Build tests that connect to local services" OFF)

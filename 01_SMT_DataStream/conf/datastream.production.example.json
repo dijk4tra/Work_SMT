@@ -1,0 +1,62 @@
+{
+  "http": {
+    "listen_address": "127.0.0.1",
+    "port": 8080,
+    "request_body_limit_bytes": 9437184,
+    "graceful_shutdown_timeout_seconds": 30
+  },
+  "mysql": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "database": "smt_datastream",
+    "user": "root",
+    "password_env": "SMT_DATASTREAM_MYSQL_PASSWORD"
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "database": 0,
+    "username": "default",
+    "password_env": null,
+    "key_prefix": "smt:prod:"
+  },
+  "operator_auth": {
+    "bearer_token_env": "SMT_DATASTREAM_OPERATOR_TOKEN"
+  },
+  "health": {"check_timeout_ms": 3000},
+  "auth": {
+    "timestamp_tolerance_seconds": 300,
+    "request_id_ttl_seconds": 600
+  },
+  "device": {"heartbeat_ttl_seconds": 90},
+  "upload": {
+    "session_ttl_seconds": 86400,
+    "min_chunk_size_bytes": 1048576,
+    "max_chunk_size_bytes": 8388608,
+    "max_file_size_bytes": 2147483648,
+    "hash_mmap_window_bytes": 67108864,
+    "min_free_space_bytes": 10737418240,
+    "min_free_space_percent": 15,
+    "max_active_sessions": 24,
+    "max_device_sessions": 2,
+    "max_collector_sessions": 6,
+    "max_reserved_bytes": 53687091200,
+    "temp_root": "/var/lib/smt-datastream/upload_tmp",
+    "archive_root": "/var/lib/smt-datastream/archive"
+  },
+  "cleanup": {
+    "interval_seconds": 600,
+    "expired_retention_seconds": 3600
+  },
+  "query": {
+    "default_page_size": 50,
+    "max_page_size": 100,
+    "max_time_range_days": 31
+  },
+  "logging": {
+    "level": "info",
+    "file": "/var/log/smt-datastream/datastream.log",
+    "max_file_size_bytes": 104857600,
+    "max_files": 10
+  }
+}

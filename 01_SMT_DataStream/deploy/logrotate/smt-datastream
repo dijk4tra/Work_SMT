@@ -1,0 +1,10 @@
+/var/log/smt-datastream/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    su smt-datastream smt-datastream
+    create 0640 smt-datastream smt-datastream
+}

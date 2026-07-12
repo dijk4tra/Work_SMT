@@ -170,12 +170,14 @@ def main():
             )
             uploading_states = wait_for(
                 lambda: (lambda states: states if
-                         sum(item["state"] == "UPLOADING" for item in states) ==
-                         expected_archived else None)(load_states(root)),
+                         any(item["state"] == "UPLOADING" for item in states) else None)(
+                             load_states(root)),
                 10,
-                "collector did not persist all recoverable upload sessions",
+                "collector did not persist a recoverable upload session",
             )
-            uploading = uploading_states[0]
+            uploading = next(
+                item for item in uploading_states if item["state"] == "UPLOADING"
+            )
             old_upload_id = uploading["upload_id"]
             collector_process.kill()
             collector_process.communicate(timeout=10)

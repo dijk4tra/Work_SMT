@@ -1,0 +1,25 @@
+[Unit]
+Description=SMT DataStream reference collector
+After=network-online.target smt-datastream.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smt-collector
+Group=smt-collector
+EnvironmentFile=/etc/smt-datastream/collector.env
+WorkingDirectory=/var/lib/smt-collector
+ExecStart=/opt/smt-datastream/bin/collector_agent --config /etc/smt-datastream/collector.json
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/smt-collector /srv/smt-device-inbox
+UMask=0027
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
