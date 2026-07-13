@@ -1,0 +1,12 @@
+build*/
+.cache/
+logs/*.log
+data/index/
+data/test_runtime/
+__pycache__/
+*.py[cod]
+*.swp
+*.tmp
+.env
+*.env.local
+conf/logtrace.env

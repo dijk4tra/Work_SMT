@@ -1,0 +1,62 @@
+openapi: 3.0.3
+info:
+  title: SMT LogTrace Gateway API
+  version: 0.1.0
+  description: 第一阶段机器可读契约；后续只在业务路由实际实现时扩展。
+paths:
+  /health/live:
+    get:
+      summary: Gateway 进程存活检查
+      responses:
+        '200':
+          description: 进程存活
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /health/ready:
+    get:
+      summary: Search Server 及其依赖就绪检查
+      responses:
+        '200':
+          description: 服务就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '502':
+          description: Search RPC 不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '503':
+          description: Search Server 依赖未就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '504':
+          description: Search RPC 超时
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+components:
+  schemas:
+    ApiResponse:
+      type: object
+      required: [code, message, request_id, data]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+        data:
+          nullable: true
+          oneOf:
+            - type: object
+            - type: array
+            - type: string

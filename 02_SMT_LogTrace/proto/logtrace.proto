@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package smt.logtrace.rpc;
+
+enum ServiceStatus {
+  SERVICE_STATUS_UNSPECIFIED = 0;
+  SERVICE_STATUS_READY = 1;
+  SERVICE_STATUS_NOT_READY = 2;
+}
+
+message HealthRequest {
+  string request_id = 1;
+}
+
+message HealthResponse {
+  ServiceStatus status = 1;
+  string code = 2;
+  string message = 3;
+}
+
+service LogSearchService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+}

@@ -1,0 +1,50 @@
+{
+  "gateway": {
+    "listen_address": "127.0.0.1",
+    "port": 8081,
+    "request_body_limit_bytes": 1048576,
+    "rpc_host": "127.0.0.1",
+    "rpc_port": 1413,
+    "rpc_timeout_ms": 1000
+  },
+  "search_rpc": {
+    "listen_address": "127.0.0.1",
+    "port": 1413
+  },
+  "source_mysql": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "database": "smt_datastream",
+    "user": "smt_logtrace_reader",
+    "password_env": "SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD"
+  },
+  "state_mysql": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "database": "smt_logtrace",
+    "user": "smt_logtrace",
+    "password_env": "SMT_LOGTRACE_STATE_MYSQL_PASSWORD"
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "database": 0,
+    "username": "default",
+    "password_env": "SMT_LOGTRACE_REDIS_PASSWORD",
+    "key_prefix": "smt:logtrace:prod:"
+  },
+  "storage": {
+    "archive_root": "/var/lib/smt-datastream/archive",
+    "index_root": "/var/lib/smt-logtrace/index"
+  },
+  "health": {
+    "check_timeout_ms": 1000
+  },
+  "logging": {
+    "level": "info",
+    "gateway_file": "/var/log/smt-logtrace/logtrace_gateway.log",
+    "search_file": "/var/log/smt-logtrace/logsearch_server.log",
+    "max_file_size_bytes": 104857600,
+    "max_files": 10
+  }
+}
