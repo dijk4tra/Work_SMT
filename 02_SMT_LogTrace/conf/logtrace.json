@@ -40,6 +40,12 @@
   "health": {
     "check_timeout_ms": 1000
   },
+  "indexing": {
+    "poll_interval_ms": 1000,
+    "source_batch_limit": 100,
+    "document_batch_limit": 100000,
+    "max_line_bytes": 65536
+  },
   "logging": {
     "level": "info",
     "gateway_file": "./logs/logtrace_gateway.log",

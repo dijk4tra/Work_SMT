@@ -10,8 +10,10 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <climits>
 #include <cstring>
 #include <stdexcept>
+#include <vector>
 
 namespace smt {
 namespace logtrace {
@@ -72,7 +74,40 @@ void verifyWritable(const std::string& path) {
     }
 }
 
+bool validRelativePath(const std::string& path) {
+    if (path.empty() || path[0] == '/') {
+        return false;
+    }
+    std::size_t begin = 0;
+    while (begin <= path.size()) {
+        const std::size_t end = path.find('/', begin);
+        const std::string part =
+            path.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+        if (part.empty() || part == "." || part == "..") {
+            return false;
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        begin = end + 1;
+    }
+    return true;
+}
+
+std::string canonicalRoot(const std::string& path) {
+    std::vector<char> buffer(PATH_MAX + 1, '\0');
+    if (::realpath(path.c_str(), buffer.data()) == nullptr) {
+        throw std::runtime_error("cannot resolve path " + path + ": " + std::strerror(errno));
+    }
+    return buffer.data();
+}
+
 }  // namespace
+
+ArchivePathError::ArchivePathError(const char* code, const std::string& message)
+    : std::runtime_error(message), code_(code) {}
+
+const std::string& ArchivePathError::code() const { return code_; }
 
 StoragePaths::StoragePaths(const StorageConfig& config)
     : archive_root_(config.archive_root), index_root_(config.index_root) {}
@@ -98,6 +133,29 @@ bool StoragePaths::ready() const {
 const std::string& StoragePaths::archiveRoot() const { return archive_root_; }
 
 const std::string& StoragePaths::indexRoot() const { return index_root_; }
+
+std::string StoragePaths::resolveArchiveFile(const std::string& relative_path) const {
+    if (!validRelativePath(relative_path)) {
+        throw ArchivePathError("ARCHIVE_PATH_INVALID", "archive relative path is invalid");
+    }
+    const std::string root = canonicalRoot(archive_root_);
+    std::vector<char> buffer(PATH_MAX + 1, '\0');
+    const std::string unresolved = archive_root_ + "/" + relative_path;
+    if (::realpath(unresolved.c_str(), buffer.data()) == nullptr) {
+        const char* code = errno == ENOENT ? "ARCHIVE_FILE_NOT_FOUND" : "ARCHIVE_PATH_INVALID";
+        throw ArchivePathError(code, "cannot resolve archive file path");
+    }
+    std::string candidate = buffer.data();
+    const std::string prefix = root + "/";
+    if (candidate.compare(0, prefix.size(), prefix) != 0) {
+        throw ArchivePathError("ARCHIVE_PATH_INVALID", "archive path escapes archive root");
+    }
+    struct stat info;
+    if (::stat(candidate.c_str(), &info) != 0 || !S_ISREG(info.st_mode)) {
+        throw ArchivePathError("ARCHIVE_FILE_NOT_REGULAR", "archive path is not a regular file");
+    }
+    return candidate;
+}
 
 }  // namespace logtrace
 }  // namespace smt

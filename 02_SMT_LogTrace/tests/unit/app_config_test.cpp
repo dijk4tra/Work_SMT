@@ -61,6 +61,9 @@ TEST_F(AppConfigTest, LoadsCompleteContract) {
     EXPECT_EQ(config.search_rpc.port, 1413);
     EXPECT_EQ(config.source_mysql.database, "smt_datastream");
     EXPECT_EQ(config.state_mysql.database, "smt_logtrace");
+    EXPECT_EQ(config.indexing.source_batch_limit, 100U);
+    EXPECT_EQ(config.indexing.document_batch_limit, 100000U);
+    EXPECT_EQ(config.indexing.max_line_bytes, 65536U);
     EXPECT_EQ(config.source_mysql.password, "source-unit-password");
     EXPECT_EQ(config.state_mysql.password, "state-unit-password");
     EXPECT_TRUE(config.redis.password.empty());
@@ -98,6 +101,14 @@ TEST_F(AppConfigTest, RejectsInvalidRpcTimeout) {
 TEST_F(AppConfigTest, RejectsSharedLogFile) {
     nlohmann::json content = readExampleConfig();
     content["logging"]["search_file"] = content["logging"]["gateway_file"];
+    temporary_path_ = writeTemporaryConfig(content);
+
+    EXPECT_THROW(AppConfig::load(temporary_path_), ConfigError);
+}
+
+TEST_F(AppConfigTest, RejectsOversizedSourceBatch) {
+    nlohmann::json content = readExampleConfig();
+    content["indexing"]["source_batch_limit"] = 101;
     temporary_path_ = writeTemporaryConfig(content);
 
     EXPECT_THROW(AppConfig::load(temporary_path_), ConfigError);

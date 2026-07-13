@@ -62,6 +62,14 @@ struct HealthConfig {
     int check_timeout_ms;
 };
 
+/// @brief 增量扫描、文件解析和批次上限配置。
+struct IndexingConfig {
+    int poll_interval_ms;
+    std::size_t source_batch_limit;
+    std::size_t document_batch_limit;
+    std::size_t max_line_bytes;
+};
+
 /// @brief 双进程日志输出配置。
 struct LoggingConfig {
     std::string level;
@@ -80,6 +88,7 @@ struct AppConfig {
     RedisConfig redis;
     StorageConfig storage;
     HealthConfig health;
+    IndexingConfig indexing;
     LoggingConfig logging;
 
     /// @brief 从 JSON 文件和环境变量加载完整配置。

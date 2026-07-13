@@ -73,6 +73,7 @@ def main():
         config["gateway"]["rpc_port"] = search_port
         config["storage"]["archive_root"] = str(archive_root)
         config["storage"]["index_root"] = str(root / "index")
+        config["indexing"]["poll_interval_ms"] = 60000
         config["logging"]["search_file"] = str(root / "search.log")
         config["logging"]["gateway_file"] = str(root / "gateway.log")
         config_path = root / "logtrace.json"

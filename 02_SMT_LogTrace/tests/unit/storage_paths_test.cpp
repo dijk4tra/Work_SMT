@@ -31,6 +31,9 @@ class StoragePathsTest : public testing::Test {
 
     /// @brief 删除测试创建的已知文件和目录。
     void TearDown() override {
+        std::remove((root_ + "/archive/file.log").c_str());
+        std::remove((root_ + "/archive/link.log").c_str());
+        std::remove((root_ + "/outside.log").c_str());
         std::remove((root_ + "/index-file").c_str());
         ::rmdir((root_ + "/index/nested").c_str());
         ::rmdir((root_ + "/index").c_str());
@@ -63,6 +66,40 @@ TEST_F(StoragePathsTest, RejectsIndexRegularFile) {
 
     StoragePaths paths(StorageConfig{root_ + "/archive", file_path});
     EXPECT_THROW(paths.initialize(), std::runtime_error);
+}
+
+TEST_F(StoragePathsTest, ResolvesRegularArchiveAndRejectsTraversal) {
+    const std::string file_path = root_ + "/archive/file.log";
+    std::ofstream output(file_path.c_str());
+    output << "log";
+    output.close();
+    StoragePaths paths(StorageConfig{root_ + "/archive", root_ + "/index"});
+    paths.initialize();
+
+    EXPECT_EQ(paths.resolveArchiveFile("file.log"), file_path);
+    try {
+        paths.resolveArchiveFile("../outside.log");
+        FAIL() << "expected ArchivePathError";
+    } catch (const ArchivePathError& error) {
+        EXPECT_EQ(error.code(), "ARCHIVE_PATH_INVALID");
+    }
+}
+
+TEST_F(StoragePathsTest, RejectsSymlinkEscapingArchiveRoot) {
+    const std::string outside = root_ + "/outside.log";
+    std::ofstream output(outside.c_str());
+    output << "outside";
+    output.close();
+    ASSERT_EQ(::symlink(outside.c_str(), (root_ + "/archive/link.log").c_str()), 0);
+    StoragePaths paths(StorageConfig{root_ + "/archive", root_ + "/index"});
+    paths.initialize();
+
+    try {
+        paths.resolveArchiveFile("link.log");
+        FAIL() << "expected ArchivePathError";
+    } catch (const ArchivePathError& error) {
+        EXPECT_EQ(error.code(), "ARCHIVE_PATH_INVALID");
+    }
 }
 
 }  // namespace

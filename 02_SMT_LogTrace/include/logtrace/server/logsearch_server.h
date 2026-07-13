@@ -9,6 +9,8 @@
 #include <srpc/rpc_define.h>
 
 #include "logtrace/config/app_config.h"
+#include "logtrace/indexing/incremental_indexer.h"
+#include "logtrace/indexing/index_worker.h"
 #include "logtrace/rpc/search_health_service.h"
 #include "logtrace/storage/mysql_client.h"
 #include "logtrace/storage/redis_client.h"
@@ -41,6 +43,8 @@ class LogSearchServer {
     MySqlClient source_mysql_;
     MySqlClient state_mysql_;
     RedisClient redis_;
+    IncrementalIndexer indexer_;
+    IndexWorker index_worker_;
     SearchHealthService health_service_;
     srpc::SRPCServer rpc_server_;
     bool started_;

@@ -164,7 +164,7 @@ AppConfig AppConfig::load(const std::string& path) {
     try {
         requireExactKeys(root,
                          {"gateway", "search_rpc", "source_mysql", "state_mysql", "redis",
-                          "storage", "health", "logging"},
+                          "storage", "health", "indexing", "logging"},
                          "config");
         AppConfig config;
 
@@ -243,6 +243,20 @@ AppConfig AppConfig::load(const std::string& path) {
         requireExactKeys(health, {"check_timeout_ms"}, "health");
         config.health.check_timeout_ms =
             static_cast<int>(requireUnsigned(health, "check_timeout_ms", 50, 30000, "health"));
+
+        const Json& indexing = root.at("indexing");
+        requireExactKeys(
+            indexing,
+            {"poll_interval_ms", "source_batch_limit", "document_batch_limit", "max_line_bytes"},
+            "indexing");
+        config.indexing.poll_interval_ms =
+            static_cast<int>(requireUnsigned(indexing, "poll_interval_ms", 100, 60000, "indexing"));
+        config.indexing.source_batch_limit = static_cast<std::size_t>(
+            requireUnsigned(indexing, "source_batch_limit", 1, 100, "indexing"));
+        config.indexing.document_batch_limit = static_cast<std::size_t>(
+            requireUnsigned(indexing, "document_batch_limit", 1, 100000, "indexing"));
+        config.indexing.max_line_bytes = static_cast<std::size_t>(
+            requireUnsigned(indexing, "max_line_bytes", 256, 1024ULL * 1024, "indexing"));
 
         const Json& logging = root.at("logging");
         requireExactKeys(

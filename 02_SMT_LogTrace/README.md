@@ -4,9 +4,10 @@
 `01_SMT_DataStream` 已完成校验的归档元数据和不可变文件，对运行日志与 FCT 测试记录进行
 增量解析、倒排索引和结构化检索，并在命中后使用 `pread` 回读原始记录。
 
-当前版本已完成第一阶段代码、设计基线和基础设施复验，已确定双进程架构和完整六期计划。
-本阶段只实现工程基础设施、Protobuf/SRPC 健康链路、配置、存储检查和数据库迁移，不包含空的
-搜索接口或伪索引实现。Debug/Release 构建及完整 17 项测试已经通过，当前等待用户确认第一阶段。
+当前版本已完成第一、第二阶段。除工程基础设施、Protobuf/SRPC 健康链路和数据库迁移外，
+Search Server 已能按 `archive_id` 增量消费一期归档，使用明确解析器生成原子发布的 `PARSED`
+工件，并保留失败状态和重建入口。Debug/Release 构建及完整 29 项测试已经通过，当前等待用户
+确认第二阶段；倒排索引、Segment 和搜索接口仍按计划留在后续阶段。
 
 ## 1. 与一期项目的关系
 
@@ -65,11 +66,11 @@ DataStream archive_file + archive_root
 ├── scripts/              # 构建、迁移、运行和验收脚本
 ├── src/                  # Gateway、Search Server 和基础设施实现
 ├── tests/                # 单元、集成与端到端测试
+├── tools/                # 固定三线解析样本生成器
 └── logs/                 # 本地日志目录
 ```
 
-第二期实现固定业务样本时再创建 `tools/`，第六期生成部署资产时再创建 `deploy/`，避免在当前
-阶段保留空目录或占位文件。
+第六期生成部署资产时再创建 `deploy/`，避免在当前阶段保留空目录或占位文件。
 
 ## 5. 文档顺序
 
@@ -84,10 +85,11 @@ DataStream archive_file + archive_root
 9. `docs/09_分期实施计划.md`
 10. `docs/10_本机环境检查.md`
 11. `docs/11_第一期开发报告.md`
+12. `docs/12_第二期开发报告.md`
 
 根目录 `agent.md` 和 `代码注释规范.md` 对本项目同样生效。
 
-## 6. 第一阶段构建
+## 6. 构建与测试
 
 复制 `conf/logtrace.env.example` 为不会提交的 `conf/logtrace.env`，填入本机凭据后在当前 Shell
 加载。服务只读取环境变量，不会主动解析该文件：
@@ -126,8 +128,9 @@ cmake --build build --parallel 2
 ctest --test-dir build -N
 ```
 
-当前已确认共注册并通过 17 项测试，其中 14 项不依赖本机服务，另外 2 项验证真实 MySQL/Redis
-客户端，1 项验证 Search Server、Gateway、SRPC 和 HTTP 的双进程 E2E。
+当前已确认共注册并通过 29 项测试，其中 25 项不依赖本机服务，另外 2 项验证真实 MySQL/Redis
+客户端，1 项验证 Search Server、Gateway、SRPC 和 HTTP 健康链路，1 项验证增量扫描、失败隔离、
+重建和 Search Server 后台轮询。
 
 ## 7. 数据库准备
 
@@ -146,7 +149,8 @@ scripts/db.sh migrate --config conf/logtrace.json
 scripts/db.sh seed --config conf/logtrace.json
 ```
 
-迁移脚本保存文件 SHA-256；已执行版本被修改后会明确停止。Search Server 不在启动时自动改表。
+第二阶段需要 `002_parsed_batch.sql`。迁移脚本保存文件 SHA-256；已执行版本被修改后会明确停止。
+Search Server 不在启动时自动改表。
 
 ## 8. 启动顺序
 
@@ -159,4 +163,32 @@ scripts/health_check.sh http://127.0.0.1:8081
 ```
 
 Gateway 启动时会探测 Search Server；Search Server 会探测两个 MySQL、Redis、归档目录和索引
-目录。必要依赖不可用时进程明确退出，不以内存假数据继续运行。
+目录，然后启动后台增量轮询。必要依赖不可用时进程明确退出，不以内存假数据继续运行。
+
+## 9. 第二阶段管理命令
+
+单次扫描适合本机验收和运维排查：
+
+```bash
+./build/logtrace_admin --config conf/logtrace.json scan-once
+```
+
+明确重建某个已消费归档时使用：
+
+```bash
+./build/logtrace_admin --config conf/logtrace.json rebuild --archive-id 123
+```
+
+重建按原解析批次处理，避免旧批次留下部分有效工件。Search Server 与管理命令通过
+`index_root/.indexer.lock` 跨进程串行化，不能同时修改解析状态。
+
+成功解析的批次位于 `index_root/parsed/batch_<batch_id>/`，包含 `manifest.json`、
+`archives.jsonl` 和 `documents.jsonl`。工件只保存归档元数据、结构化字段及精确
+`offset/length`，不复制完整原文。第二阶段的成功状态是 `PARSED`；第三阶段构建并原子发布
+Segment 后才会进入 `READY` 和查询范围。
+
+固定三线样本可重复生成到一个尚不存在的目录：
+
+```bash
+python3 tools/generate_phase2_samples.py --output /tmp/logtrace-phase2-samples
+```

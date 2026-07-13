@@ -62,8 +62,16 @@ set(LOGTRACE_CORE_SOURCES
     src/common/api_response.cpp
     src/common/logging.cpp
     src/common/request_id.cpp
+    src/common/sha256.cpp
+    src/common/time_utils.cpp
     src/common/uri_utils.cpp
     src/config/app_config.cpp
+    src/indexing/archive_parser.cpp
+    src/indexing/archive_source_repository.cpp
+    src/indexing/incremental_indexer.cpp
+    src/indexing/index_state_repository.cpp
+    src/indexing/index_worker.cpp
+    src/indexing/parsed_batch_writer.cpp
     src/rpc/search_health_service.cpp
     src/rpc/search_rpc_client.cpp
     src/server/logsearch_server.cpp
@@ -121,6 +129,10 @@ target_compile_options(logsearch_server PRIVATE -Wall -Wextra -Wpedantic -Werror
 add_executable(logtrace_gateway src/gateway_main.cpp)
 target_link_libraries(logtrace_gateway PRIVATE logtrace_core)
 target_compile_options(logtrace_gateway PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+add_executable(logtrace_admin src/admin_main.cpp)
+target_link_libraries(logtrace_admin PRIVATE logtrace_core)
+target_compile_options(logtrace_admin PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 if(LOGTRACE_BUILD_TESTS)
     enable_testing()
