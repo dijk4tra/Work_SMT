@@ -1,0 +1,26 @@
+[Unit]
+Description=SMT LogTrace HTTP gateway
+After=network-online.target smt-logsearch.service
+Wants=network-online.target
+Requires=smt-logsearch.service
+
+[Service]
+Type=simple
+User=smt-logtrace
+Group=smt-logtrace
+EnvironmentFile=/etc/smt-logtrace/logtrace.env
+WorkingDirectory=/var/lib/smt-logtrace
+ExecStart=/opt/smt-logtrace/bin/logtrace_gateway --config /etc/smt-logtrace/logtrace.json
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/smt-logtrace
+UMask=0027
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

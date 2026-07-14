@@ -1,0 +1,10 @@
+/var/log/smt-logtrace/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    su smt-logtrace smt-logtrace
+    create 0640 smt-logtrace smt-logtrace
+}

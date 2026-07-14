@@ -1,0 +1,26 @@
+[Unit]
+Description=SMT LogTrace search and indexing service
+After=network-online.target mysql.service redis-server.service smt-datastream.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smt-logtrace
+Group=smt-logtrace
+EnvironmentFile=/etc/smt-logtrace/logtrace.env
+WorkingDirectory=/var/lib/smt-logtrace
+ExecStart=/opt/smt-logtrace/bin/logsearch_server --config /etc/smt-logtrace/logtrace.json
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=35s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/var/lib/smt-datastream/archive
+ReadWritePaths=/var/lib/smt-logtrace /var/log/smt-logtrace
+UMask=0027
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

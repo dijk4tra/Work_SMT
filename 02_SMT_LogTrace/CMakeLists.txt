@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(SMTLogTrace VERSION 0.1.0 LANGUAGES CXX)
+project(SMTLogTrace VERSION 1.0.0 LANGUAGES CXX)
 
 option(LOGTRACE_BUILD_TESTS "Build unit tests" ON)
 option(LOGTRACE_ENABLE_INTEGRATION_TESTS "Build tests that connect to local services" OFF)
