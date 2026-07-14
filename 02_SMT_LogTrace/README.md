@@ -4,10 +4,10 @@
 `01_SMT_DataStream` 已完成校验的归档元数据和不可变文件，对运行日志与 FCT 测试记录进行
 增量解析、倒排索引和结构化检索，并在命中后使用 `pread` 回读原始记录。
 
-当前版本已完成第一、第二阶段。除工程基础设施、Protobuf/SRPC 健康链路和数据库迁移外，
-Search Server 已能按 `archive_id` 增量消费一期归档，使用明确解析器生成原子发布的 `PARSED`
-工件，并保留失败状态和重建入口。Debug/Release 构建及完整 29 项测试已经通过，当前等待用户
-确认第二阶段；倒排索引、Segment 和搜索接口仍按计划留在后续阶段。
+当前版本已完成第一至第三阶段。Search Server 能按 `archive_id` 增量消费一期归档，从原子发布的
+`PARSED` 工件构建固定版本 Term、Posting、文档和文件表，并只将完整校验且数据库登记为
+`READY` 的不可变 Segment 加入查询快照。当前 Debug/Release 构建及完整 34 项测试已通过，等待用户
+确认第三阶段；BM25、Top-K、搜索 HTTP/RPC 和缓存仍属于后续阶段。
 
 ## 1. 与一期项目的关系
 
@@ -86,6 +86,7 @@ DataStream archive_file + archive_root
 10. `docs/10_本机环境检查.md`
 11. `docs/11_第一期开发报告.md`
 12. `docs/12_第二期开发报告.md`
+13. `docs/13_第三期开发报告.md`
 
 根目录 `agent.md` 和 `代码注释规范.md` 对本项目同样生效。
 
@@ -128,9 +129,9 @@ cmake --build build --parallel 2
 ctest --test-dir build -N
 ```
 
-当前已确认共注册并通过 29 项测试，其中 25 项不依赖本机服务，另外 2 项验证真实 MySQL/Redis
+当前已确认共注册并通过 34 项测试，其中 30 项不依赖本机服务，另外 2 项验证真实 MySQL/Redis
 客户端，1 项验证 Search Server、Gateway、SRPC 和 HTTP 健康链路，1 项验证增量扫描、失败隔离、
-重建和 Search Server 后台轮询。
+倒排 Segment、中断恢复、损坏拒绝、重建和 Search Server 后台轮询。
 
 ## 7. 数据库准备
 
@@ -149,7 +150,8 @@ scripts/db.sh migrate --config conf/logtrace.json
 scripts/db.sh seed --config conf/logtrace.json
 ```
 
-第二阶段需要 `002_parsed_batch.sql`。迁移脚本保存文件 SHA-256；已执行版本被修改后会明确停止。
+第二、第三阶段分别需要 `002_parsed_batch.sql` 和 `003_ready_segment.sql`。迁移脚本保存文件
+SHA-256；已执行版本被修改后会明确停止。
 Search Server 不在启动时自动改表。
 
 ## 8. 启动顺序
@@ -163,7 +165,8 @@ scripts/health_check.sh http://127.0.0.1:8081
 ```
 
 Gateway 启动时会探测 Search Server；Search Server 会探测两个 MySQL、Redis、归档目录和索引
-目录，然后启动后台增量轮询。必要依赖不可用时进程明确退出，不以内存假数据继续运行。
+目录，恢复 BUILDING 批次并加载全部 READY Segment，然后启动后台增量轮询。任一 READY
+Segment 缺失或损坏时启动明确失败，不以空快照继续运行。
 
 ## 9. 第二阶段管理命令
 
@@ -192,3 +195,26 @@ Segment 后才会进入 `READY` 和查询范围。
 ```bash
 python3 tools/generate_phase2_samples.py --output /tmp/logtrace-phase2-samples
 ```
+
+## 10. 第三阶段 Segment 命令与布局
+
+单次构建最早的 PARSED 批次：
+
+```bash
+./build/logtrace_admin --config conf/logtrace.json build-once
+```
+
+正式目录为 `index_root/segments/segment_<batch_id>/`：
+
+```text
+manifest.json
+terms.bin
+postings.bin
+documents.bin
+files.bin
+```
+
+二进制文件使用固定小端版本头和显式长度，manifest 保存每个文件的大小与 SHA-256。构建先在
+`segments/.building/segment_<batch_id>` 完成 `fsync` 和整段加载校验，再原子 `rename`。只有后续
+MySQL 原子更新为 `READY/INDEXED` 后才会交换内存快照。Segment 不保存完整正文；详情能力从
+`files.bin` 和 `documents.bin` 定位一期归档，使用循环 `pread` 回读精确字节。

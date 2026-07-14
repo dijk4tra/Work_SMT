@@ -12,15 +12,21 @@ from pathlib import Path
 
 
 def run(command, env=None, input_text=None):
-    return subprocess.run(
+    result = subprocess.run(
         command,
-        check=True,
+        check=False,
         env=env,
         input=input_text,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"command failed ({result.returncode}): {' '.join(command)}\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+    return result
 
 
 def mysql_env(password_name):
@@ -195,10 +201,103 @@ CREATE TABLE archive_file (
             documents = root / "index" / "parsed" / "batch_1" / "documents.jsonl"
             assert len(documents.read_text(encoding="utf-8").splitlines()) == 7
 
+            built = run(
+                [str(admin_binary), "--config", str(config_path), "build-once"], env=env
+            )
+            build_summary = json.loads(built.stdout.splitlines()[-1])
+            assert build_summary["batch_built"] is True
+            assert build_summary["batch_id"] == 1
+            assert build_summary["segment_name"] == "segment_1"
+            assert build_summary["document_count"] == 7
+            assert build_summary["term_count"] > 0
+            assert build_summary["posting_count"] >= build_summary["term_count"]
+            assert build_summary["snapshot_version"] == 1
+            assert build_summary["snapshot_segment_count"] == 1
+            assert build_summary["snapshot_document_count"] == 7
+            states = query(
+                config,
+                "state_mysql",
+                state_database,
+                "SELECT state,COUNT(*) FROM indexed_archive GROUP BY state ORDER BY state",
+            )
+            assert states == ["FAILED\t2", "INDEXED\t3"]
+            segment = root / "index" / "segments" / "segment_1"
+            assert sorted(path.name for path in segment.iterdir()) == [
+                "documents.bin",
+                "files.bin",
+                "manifest.json",
+                "postings.bin",
+                "terms.bin",
+            ]
+
             second = run(
                 [str(admin_binary), "--config", str(config_path), "scan-once"], env=env
             )
             assert json.loads(second.stdout.splitlines()[-1])["batch_created"] is False
+            second_build = run(
+                [str(admin_binary), "--config", str(config_path), "build-once"], env=env
+            )
+            second_build_summary = json.loads(second_build.stdout.splitlines()[-1])
+            assert second_build_summary["batch_built"] is False
+            assert second_build_summary["snapshot_version"] == 1
+
+            query(
+                config,
+                "state_mysql",
+                state_database,
+                "UPDATE index_batch SET state='BUILDING',segment_sha256=NULL,"
+                "published_at=NULL WHERE batch_id=1",
+            )
+            orphan = root / "index" / "segments" / "segment_999"
+            orphan.mkdir()
+            search_log = (root / "search-recovery.log").open("wb")
+            search = subprocess.Popen(
+                [str(search_binary), "--config", str(config_path)],
+                env=env,
+                stdout=search_log,
+                stderr=subprocess.STDOUT,
+            )
+            try:
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if search.poll() is not None:
+                        raise RuntimeError(
+                            f"search recovery exited early with code {search.returncode}"
+                        )
+                    recovered = query(
+                        config,
+                        "state_mysql",
+                        state_database,
+                        "SELECT state FROM index_batch WHERE batch_id=1",
+                    )
+                    if recovered == ["READY"]:
+                        break
+                    time.sleep(0.05)
+                else:
+                    raise RuntimeError("renamed BUILDING Segment was not recovered")
+            finally:
+                stop_process(search)
+                search_log.close()
+            assert search.returncode == 0
+            assert orphan.is_dir()
+
+            terms_path = segment / "terms.bin"
+            original_terms = terms_path.read_bytes()
+            terms_path.write_bytes(original_terms + b"x")
+            corrupt_log = (root / "search-corrupt.log").open("wb")
+            corrupt_search = subprocess.Popen(
+                [str(search_binary), "--config", str(config_path)],
+                env=env,
+                stdout=corrupt_log,
+                stderr=subprocess.STDOUT,
+            )
+            try:
+                corrupt_search.wait(timeout=5)
+            finally:
+                stop_process(corrupt_search)
+                corrupt_log.close()
+                terms_path.write_bytes(original_terms)
+            assert corrupt_search.returncode != 0
 
             run(
                 [
@@ -211,6 +310,7 @@ CREATE TABLE archive_file (
                 ],
                 env=env,
             )
+            assert not segment.exists()
             search_log = (root / "search-process.log").open("wb")
             search = subprocess.Popen(
                 [str(search_binary), "--config", str(config_path)],
@@ -231,11 +331,11 @@ CREATE TABLE archive_file (
                         state_database,
                         "SELECT state FROM index_batch WHERE batch_id=2",
                     )
-                    if batch_state == ["PARSED"]:
+                    if batch_state == ["READY"]:
                         break
                     time.sleep(0.05)
                 else:
-                    raise RuntimeError("background index batch did not complete")
+                    raise RuntimeError("background READY Segment did not complete")
             finally:
                 stop_process(search)
                 search_log.close()
@@ -246,9 +346,38 @@ CREATE TABLE archive_file (
                 state_database,
                 "SELECT state,COALESCE(failure_code,'') FROM index_batch ORDER BY batch_id",
             )
-            assert batches == ["FAILED\tREBUILD_REQUESTED", "PARSED\t"]
+            assert batches == ["FAILED\tREBUILD_REQUESTED", "READY\t"]
             assert not (root / "index" / "parsed" / "batch_1").exists()
             assert (root / "index" / "parsed" / "batch_2" / "manifest.json").is_file()
+            assert (root / "index" / "segments" / "segment_2" / "manifest.json").is_file()
+            states = query(
+                config,
+                "state_mysql",
+                state_database,
+                "SELECT state,COUNT(*) FROM indexed_archive GROUP BY state ORDER BY state",
+            )
+            assert states == ["FAILED\t2", "INDEXED\t3"]
+
+            temporary_build = root / "index" / "segments" / ".building" / "segment_777"
+            temporary_build.mkdir()
+            final_log = (root / "search-final-recovery.log").open("wb")
+            final_search = subprocess.Popen(
+                [str(search_binary), "--config", str(config_path)],
+                env=env,
+                stdout=final_log,
+                stderr=subprocess.STDOUT,
+            )
+            try:
+                time.sleep(0.3)
+                if final_search.poll() is not None:
+                    raise RuntimeError(
+                        f"final snapshot recovery exited with code {final_search.returncode}"
+                    )
+            finally:
+                stop_process(final_search)
+                final_log.close()
+            assert final_search.returncode == 0
+            assert not temporary_build.exists()
         finally:
             run(
                 mysql_command(config, "source_mysql")

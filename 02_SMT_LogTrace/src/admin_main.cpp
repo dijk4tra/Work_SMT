@@ -5,12 +5,15 @@
 
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
 
 #include "logtrace/config/app_config.h"
 #include "logtrace/indexing/incremental_indexer.h"
+#include "logtrace/indexing/index_snapshot.h"
+#include "logtrace/indexing/segment_manager.h"
 #include "logtrace/storage/mysql_client.h"
 #include "logtrace/storage/storage_paths.h"
 
@@ -24,9 +27,11 @@ struct AdminCommand {
 };
 
 AdminCommand parseCommand(int argc, char* argv[]) {
-    if (argc == 4 && std::string(argv[1]) == "--config" && argv[2][0] != '\0' &&
-        std::string(argv[3]) == "scan-once") {
-        return AdminCommand{argv[2], "scan-once", 0};
+    if (argc == 4 && std::string(argv[1]) == "--config" && argv[2][0] != '\0') {
+        const std::string action = argv[3];
+        if (action == "scan-once" || action == "build-once") {
+            return AdminCommand{argv[2], action, 0};
+        }
     }
     if (argc == 6 && std::string(argv[1]) == "--config" && argv[2][0] != '\0' &&
         std::string(argv[3]) == "rebuild" && std::string(argv[4]) == "--archive-id") {
@@ -38,7 +43,8 @@ AdminCommand parseCommand(int argc, char* argv[]) {
         return AdminCommand{argv[2], "rebuild", archive_id};
     }
     throw std::invalid_argument(
-        "usage: logtrace_admin --config <path> <scan-once|rebuild --archive-id ID>");
+        "usage: logtrace_admin --config <path> "
+        "<scan-once|build-once|rebuild --archive-id ID>");
 }
 
 }  // namespace
@@ -67,6 +73,27 @@ int main(int argc, char* argv[]) {
                                         {"parsed_file_count", summary.parsed_file_count},
                                         {"failed_file_count", summary.failed_file_count},
                                         {"document_count", summary.document_count}}
+                             .dump()
+                      << '\n';
+            return 0;
+        }
+        if (command.action == "build-once") {
+            smt::logtrace::IndexSnapshotStore snapshots;
+            smt::logtrace::SegmentManager manager(state_mysql, storage,
+                                                  config.health.check_timeout_ms, snapshots);
+            manager.recoverAndLoad();
+            const smt::logtrace::SegmentBuildSummary summary = manager.buildNext();
+            const std::shared_ptr<const smt::logtrace::IndexSnapshot> snapshot =
+                snapshots.current();
+            std::cout << nlohmann::json{{"batch_built", summary.batch_built},
+                                        {"batch_id", summary.result.batch_id},
+                                        {"segment_name", summary.result.segment_name},
+                                        {"document_count", summary.result.document_count},
+                                        {"term_count", summary.result.term_count},
+                                        {"posting_count", summary.result.posting_count},
+                                        {"snapshot_version", snapshot->version()},
+                                        {"snapshot_segment_count", snapshot->segmentCount()},
+                                        {"snapshot_document_count", snapshot->documentCount()}}
                              .dump()
                       << '\n';
             return 0;

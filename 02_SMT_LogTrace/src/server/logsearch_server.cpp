@@ -20,7 +20,9 @@ LogSearchServer::LogSearchServer(const AppConfig& config)
       indexer_(IndexerDependencies{source_mysql_, state_mysql_, storage_,
                                    config.health.check_timeout_ms},
                config.indexing),
-      index_worker_(indexer_, config.indexing.poll_interval_ms),
+      snapshots_(),
+      segment_manager_(state_mysql_, storage_, config.health.check_timeout_ms, snapshots_),
+      index_worker_(indexer_, segment_manager_, config.indexing.poll_interval_ms),
       health_service_(SearchHealthDependencies{source_mysql_, state_mysql_, redis_, storage_},
                       config.health.check_timeout_ms),
       started_(false) {
@@ -41,6 +43,7 @@ void LogSearchServer::initialize() {
         throw std::runtime_error("Redis startup probe failed");
     }
     indexer_.recover();
+    segment_manager_.recoverAndLoad();
 }
 
 bool LogSearchServer::start() {

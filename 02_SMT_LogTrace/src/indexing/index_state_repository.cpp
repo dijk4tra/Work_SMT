@@ -10,6 +10,7 @@
 #include <workflow/WFFacilities.h>
 
 #include <atomic>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,23 @@ bool executeUpdate(const MySqlClient& mysql, int timeout_ms, const std::string& 
             success.store(completed->get_state() == WFT_STATE_SUCCESS &&
                               !completed->get_resp()->is_error_packet(),
                           std::memory_order_release);
+            wait_group.done();
+        });
+    task->start();
+    wait_group.wait();
+    return success.load(std::memory_order_acquire);
+}
+
+bool executeChangedUpdate(const MySqlClient& mysql, int timeout_ms, const std::string& sql) {
+    std::atomic<bool> success(false);
+    WFFacilities::WaitGroup wait_group(1);
+    WFMySQLTask* task =
+        mysql.createQuery(sql, timeout_ms, [&success, &wait_group](WFMySQLTask* completed) {
+            if (completed->get_state() == WFT_STATE_SUCCESS &&
+                !completed->get_resp()->is_error_packet()) {
+                protocol::MySQLResultCursor cursor(completed->get_resp());
+                success.store(cursor.get_affected_rows() != 0, std::memory_order_release);
+            }
             wait_group.done();
         });
     task->start();
@@ -57,6 +75,60 @@ bool queryUnsignedValues(const MySqlClient& mysql, int timeout_ms, const std::st
                     return;
                 }
                 values->push_back(row[0].as_ulonglong());
+            }
+            success.store(true, std::memory_order_release);
+            wait_group.done();
+        });
+    task->start();
+    wait_group.wait();
+    return success.load(std::memory_order_acquire);
+}
+
+bool queryBatchDescriptors(const MySqlClient& mysql, int timeout_ms, const std::string& sql,
+                           std::vector<ParsedBatchDescriptor>* batches) {
+    batches->clear();
+    std::atomic<bool> success(false);
+    WFFacilities::WaitGroup wait_group(1);
+    WFMySQLTask* task = mysql.createQuery(
+        sql, timeout_ms, [&success, &wait_group, batches](WFMySQLTask* completed) {
+            if (completed->get_state() != WFT_STATE_SUCCESS ||
+                completed->get_resp()->is_error_packet()) {
+                wait_group.done();
+                return;
+            }
+            protocol::MySQLResultCursor cursor(completed->get_resp());
+            std::vector<protocol::MySQLCell> row;
+            while (cursor.fetch_row(row)) {
+                if (row.size() != 7 || row[0].is_null() || row[1].is_null() || row[2].is_null() ||
+                    row[3].is_null() || row[4].is_null() || row[5].is_null() || row[6].is_null()) {
+                    batches->clear();
+                    wait_group.done();
+                    return;
+                }
+                const int source_count = row[3].as_int();
+                const std::uint64_t document_count = row[4].as_ulonglong();
+                if (source_count <= 0 || document_count > std::numeric_limits<std::size_t>::max()) {
+                    batches->clear();
+                    wait_group.done();
+                    return;
+                }
+                ParsedBatchDescriptor descriptor;
+                descriptor.batch_id = row[0].as_ulonglong();
+                descriptor.first_archive_id = row[1].as_ulonglong();
+                descriptor.last_archive_id = row[2].as_ulonglong();
+                descriptor.source_file_count = static_cast<std::size_t>(source_count);
+                descriptor.document_count = static_cast<std::size_t>(document_count);
+                descriptor.parsed_path = row[5].as_string();
+                descriptor.parsed_sha256 = row[6].as_string();
+                if (descriptor.batch_id == 0 || descriptor.first_archive_id == 0 ||
+                    descriptor.last_archive_id < descriptor.first_archive_id ||
+                    descriptor.source_file_count == 0 || descriptor.document_count == 0 ||
+                    descriptor.parsed_path.empty() || descriptor.parsed_sha256.size() != 64) {
+                    batches->clear();
+                    wait_group.done();
+                    return;
+                }
+                batches->push_back(descriptor);
             }
             success.store(true, std::memory_order_release);
             wait_group.done();
@@ -212,7 +284,9 @@ bool IndexStateRepository::markBatchParsed(std::uint64_t batch_id, const std::st
         "UPDATE index_batch SET state='PARSED',document_count=" + std::to_string(document_count) +
             ",parsed_path=" + quoteSql(parsed_path) + ",parsed_sha256=UNHEX(" +
             quoteSql(parsed_sha256) +
-            "),failure_code=NULL WHERE batch_id=" + std::to_string(batch_id));
+            "),segment_name=NULL,segment_sha256=NULL,published_at=NULL,failure_code=NULL "
+            "WHERE batch_id=" +
+            std::to_string(batch_id));
 }
 
 bool IndexStateRepository::markBatchFailed(std::uint64_t batch_id,
@@ -221,6 +295,108 @@ bool IndexStateRepository::markBatchFailed(std::uint64_t batch_id,
         mysql_, timeout_ms_,
         "UPDATE index_batch SET state='FAILED',failure_code=" + quoteSql(failure_code) +
             " WHERE batch_id=" + std::to_string(batch_id));
+}
+
+bool IndexStateRepository::listParsedBatches(std::size_t limit,
+                                             std::vector<ParsedBatchDescriptor>* batches) const {
+    return queryBatchDescriptors(
+        mysql_, timeout_ms_,
+        "SELECT batch_id,first_archive_id,last_archive_id,source_file_count,document_count,"
+        "parsed_path,LOWER(HEX(parsed_sha256)) FROM index_batch WHERE state='PARSED' "
+        "ORDER BY batch_id ASC LIMIT " +
+            std::to_string(limit),
+        batches);
+}
+
+bool IndexStateRepository::listBuildingBatches(std::vector<ParsedBatchDescriptor>* batches) const {
+    return queryBatchDescriptors(
+        mysql_, timeout_ms_,
+        "SELECT batch_id,first_archive_id,last_archive_id,source_file_count,document_count,"
+        "parsed_path,LOWER(HEX(parsed_sha256)) FROM index_batch WHERE state='BUILDING' "
+        "ORDER BY batch_id ASC",
+        batches);
+}
+
+bool IndexStateRepository::listReadySegments(std::vector<ReadySegmentDescriptor>* segments) const {
+    segments->clear();
+    std::atomic<bool> success(false);
+    WFFacilities::WaitGroup wait_group(1);
+    WFMySQLTask* task = mysql_.createQuery(
+        "SELECT batch_id,segment_name,LOWER(HEX(segment_sha256)) FROM index_batch "
+        "WHERE state='READY' ORDER BY batch_id ASC",
+        timeout_ms_, [&success, &wait_group, segments](WFMySQLTask* completed) {
+            if (completed->get_state() != WFT_STATE_SUCCESS ||
+                completed->get_resp()->is_error_packet()) {
+                wait_group.done();
+                return;
+            }
+            protocol::MySQLResultCursor cursor(completed->get_resp());
+            std::vector<protocol::MySQLCell> row;
+            while (cursor.fetch_row(row)) {
+                if (row.size() != 3 || row[0].is_null() || row[1].is_null() || row[2].is_null()) {
+                    segments->clear();
+                    wait_group.done();
+                    return;
+                }
+                ReadySegmentDescriptor descriptor{row[0].as_ulonglong(), row[1].as_string(),
+                                                  row[2].as_string()};
+                if (descriptor.batch_id == 0 || descriptor.segment_name.empty() ||
+                    descriptor.segment_sha256.size() != 64) {
+                    segments->clear();
+                    wait_group.done();
+                    return;
+                }
+                segments->push_back(descriptor);
+            }
+            success.store(true, std::memory_order_release);
+            wait_group.done();
+        });
+    task->start();
+    wait_group.wait();
+    return success.load(std::memory_order_acquire);
+}
+
+bool IndexStateRepository::markBatchBuilding(std::uint64_t batch_id,
+                                             const std::string& segment_name) const {
+    return executeChangedUpdate(
+        mysql_, timeout_ms_,
+        "UPDATE index_batch SET state='BUILDING',segment_name=" + quoteSql(segment_name) +
+            ",segment_sha256=NULL,published_at=NULL,failure_code=NULL WHERE batch_id=" +
+            std::to_string(batch_id) + " AND state='PARSED'");
+}
+
+bool IndexStateRepository::resetBuildingBatch(std::uint64_t batch_id,
+                                              const std::string& failure_code) const {
+    return executeChangedUpdate(
+        mysql_, timeout_ms_,
+        "UPDATE index_batch SET state='PARSED',segment_name=NULL,segment_sha256=NULL,"
+        "published_at=NULL,failure_code=" +
+            quoteSql(failure_code) + " WHERE batch_id=" + std::to_string(batch_id) +
+            " AND state='BUILDING'");
+}
+
+bool IndexStateRepository::publishBatchReady(std::uint64_t batch_id,
+                                             const std::string& segment_name,
+                                             const std::string& segment_sha256) const {
+    return executeChangedUpdate(
+        mysql_, timeout_ms_,
+        "UPDATE index_batch AS b JOIN indexed_archive AS a ON a.batch_id=b.batch_id SET "
+        "b.state='READY',b.segment_name=" +
+            quoteSql(segment_name) + ",b.segment_sha256=UNHEX(" + quoteSql(segment_sha256) +
+            "),b.failure_code=NULL,b.published_at=UTC_TIMESTAMP(3),"
+            "a.indexed_at=IF(a.state IN ('PARSED','INDEXED'),UTC_TIMESTAMP(3),a.indexed_at),"
+            "a.state=IF(a.state='PARSED','INDEXED',a.state) WHERE b.batch_id=" +
+            std::to_string(batch_id) + " AND b.state='BUILDING'");
+}
+
+bool IndexStateRepository::markSegmentBuildFailed(std::uint64_t batch_id,
+                                                  const std::string& failure_code) const {
+    return executeChangedUpdate(
+        mysql_, timeout_ms_,
+        "UPDATE index_batch SET state='FAILED',segment_name=NULL,segment_sha256=NULL,"
+        "published_at=NULL,failure_code=" +
+            quoteSql(failure_code) + " WHERE batch_id=" + std::to_string(batch_id) +
+            " AND state IN ('PARSED','BUILDING')");
 }
 
 bool IndexStateRepository::recoverInterruptedBatches(std::vector<std::uint64_t>* batch_ids) const {
@@ -259,7 +435,8 @@ RebuildStatus IndexStateRepository::requestRebuild(std::uint64_t archive_id,
     *batch_id = values[0];
     if (!executeUpdate(mysql_, timeout_ms_,
                        "UPDATE index_batch SET state='FAILED',failure_code='REBUILD_REQUESTED',"
-                       "parsed_path=NULL,parsed_sha256=NULL WHERE batch_id=" +
+                       "parsed_path=NULL,parsed_sha256=NULL,segment_name=NULL,segment_sha256=NULL,"
+                       "published_at=NULL WHERE batch_id=" +
                            std::to_string(*batch_id)) ||
         !executeUpdate(mysql_, timeout_ms_,
                        "UPDATE indexed_archive SET state='PENDING',document_count=0,"

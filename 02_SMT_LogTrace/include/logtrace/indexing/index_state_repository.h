@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "logtrace/indexing/index_models.h"
+#include "logtrace/indexing/segment_models.h"
 #include "logtrace/storage/mysql_client.h"
 
 namespace smt {
@@ -94,6 +95,48 @@ class IndexStateRepository {
     /// @param failure_code 稳定失败码。
     /// @return 更新成功时为 true。
     bool markBatchFailed(std::uint64_t batch_id, const std::string& failure_code) const;
+
+    /// @brief 返回等待构建的 PARSED 批次。
+    /// @param limit 最大返回批次数。
+    /// @param batches 成功时接收按 batch_id 升序排列的描述。
+    /// @return 查询和字段解析成功时为 true。
+    bool listParsedBatches(std::size_t limit, std::vector<ParsedBatchDescriptor>* batches) const;
+
+    /// @brief 返回启动时需要恢复的 BUILDING 批次。
+    /// @param batches 成功时接收按 batch_id 升序排列的描述。
+    /// @return 查询和字段解析成功时为 true。
+    bool listBuildingBatches(std::vector<ParsedBatchDescriptor>* batches) const;
+
+    /// @brief 返回全部允许进入查询快照的 READY Segment。
+    /// @param segments 成功时接收按 batch_id 升序排列的数据库事实。
+    /// @return 查询和字段解析成功时为 true。
+    bool listReadySegments(std::vector<ReadySegmentDescriptor>* segments) const;
+
+    /// @brief 将 PARSED 批次条件更新为 BUILDING 并登记预期 Segment 名称。
+    /// @param batch_id 批次编号。
+    /// @param segment_name 固定 `segment_<batch_id>` 名称。
+    /// @return 恰好命中可构建批次时为 true。
+    bool markBatchBuilding(std::uint64_t batch_id, const std::string& segment_name) const;
+
+    /// @brief 将未完成 BUILDING 批次恢复为 PARSED。
+    /// @param batch_id 批次编号。
+    /// @param failure_code 本次恢复原因。
+    /// @return 状态更新成功时为 true。
+    bool resetBuildingBatch(std::uint64_t batch_id, const std::string& failure_code) const;
+
+    /// @brief 使用单条原子多表 UPDATE 发布 READY 批次和 INDEXED 归档。
+    /// @param batch_id BUILDING 批次编号。
+    /// @param segment_name 正式 Segment 目录名。
+    /// @param segment_sha256 manifest SHA-256。
+    /// @return 批次与归档状态同时更新成功时为 true。
+    bool publishBatchReady(std::uint64_t batch_id, const std::string& segment_name,
+                           const std::string& segment_sha256) const;
+
+    /// @brief 标记确定失败的 Segment 构建并清除未发布定位信息。
+    /// @param batch_id 批次编号。
+    /// @param failure_code 稳定失败码。
+    /// @return 状态更新成功时为 true。
+    bool markSegmentBuildFailed(std::uint64_t batch_id, const std::string& failure_code) const;
 
     /// @brief 把遗留 PARSING 批次和归档标记为明确失败。
     /// @param batch_ids 成功时接收需要清理工件的批次编号。

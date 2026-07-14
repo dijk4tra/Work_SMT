@@ -10,7 +10,9 @@
 
 #include "logtrace/config/app_config.h"
 #include "logtrace/indexing/incremental_indexer.h"
+#include "logtrace/indexing/index_snapshot.h"
 #include "logtrace/indexing/index_worker.h"
+#include "logtrace/indexing/segment_manager.h"
 #include "logtrace/rpc/search_health_service.h"
 #include "logtrace/storage/mysql_client.h"
 #include "logtrace/storage/redis_client.h"
@@ -44,6 +46,8 @@ class LogSearchServer {
     MySqlClient state_mysql_;
     RedisClient redis_;
     IncrementalIndexer indexer_;
+    IndexSnapshotStore snapshots_;
+    SegmentManager segment_manager_;
     IndexWorker index_worker_;
     SearchHealthService health_service_;
     srpc::SRPCServer rpc_server_;

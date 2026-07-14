@@ -7,7 +7,9 @@ add_executable(
     unit/archive_parser_test.cpp
     unit/parsed_batch_writer_test.cpp
     unit/proto_contract_test.cpp
+    unit/segment_store_test.cpp
     unit/storage_paths_test.cpp
+    unit/term_tokenizer_test.cpp
     unit/uri_utils_test.cpp
 )
 target_link_libraries(logtrace_unit_tests PRIVATE logtrace_core GTest::gtest_main)

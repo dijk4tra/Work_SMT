@@ -21,6 +21,7 @@
 
 #include "logtrace/common/sha256.h"
 #include "logtrace/common/time_utils.h"
+#include "logtrace/indexing/term_tokenizer.h"
 
 namespace smt {
 namespace logtrace {
@@ -80,22 +81,6 @@ bool validUtf8(const std::string& value) {
         index += length;
     }
     return true;
-}
-
-std::size_t countTerms(const std::string& text) {
-    std::size_t count = 0;
-    bool in_term = false;
-    for (std::string::const_iterator it = text.begin(); it != text.end(); ++it) {
-        const unsigned char value = static_cast<unsigned char>(*it);
-        const bool term_character =
-            (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
-            (value >= '0' && value <= '9') || value == '_' || value == '-' || value >= 0x80;
-        if (term_character && !in_term) {
-            ++count;
-        }
-        in_term = term_character;
-    }
-    return count;
 }
 
 void fail(ParserState* state, const std::string& code, std::uint64_t line) {
@@ -190,7 +175,7 @@ ParsedDocument baseDocument(const ArchiveRecord& archive, const LineView& line) 
     document.work_order = archive.work_order;
     document.product_sn = archive.product_sn;
     document.source_type = archive.file_type;
-    document.term_count = countTerms(line.text);
+    document.term_count = tokenizeTerms(line.text).size();
     return document;
 }
 

@@ -69,9 +69,15 @@ set(LOGTRACE_CORE_SOURCES
     src/indexing/archive_parser.cpp
     src/indexing/archive_source_repository.cpp
     src/indexing/incremental_indexer.cpp
+    src/indexing/index_snapshot.cpp
     src/indexing/index_state_repository.cpp
     src/indexing/index_worker.cpp
+    src/indexing/original_log_reader.cpp
+    src/indexing/parsed_batch_reader.cpp
     src/indexing/parsed_batch_writer.cpp
+    src/indexing/segment_manager.cpp
+    src/indexing/segment_store.cpp
+    src/indexing/term_tokenizer.cpp
     src/rpc/search_health_service.cpp
     src/rpc/search_rpc_client.cpp
     src/server/logsearch_server.cpp

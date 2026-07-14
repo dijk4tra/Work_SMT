@@ -13,6 +13,7 @@
 #include "logtrace/indexing/index_models.h"
 #include "logtrace/indexing/index_state_repository.h"
 #include "logtrace/indexing/parsed_batch_writer.h"
+#include "logtrace/indexing/segment_store.h"
 #include "logtrace/storage/mysql_client.h"
 #include "logtrace/storage/storage_paths.h"
 
@@ -60,6 +61,7 @@ class IncrementalIndexer {
     ArchiveSourceRepository source_repository_;
     IndexStateRepository state_repository_;
     ParsedBatchWriter writer_;
+    SegmentStore segment_store_;
 };
 
 }  // namespace logtrace

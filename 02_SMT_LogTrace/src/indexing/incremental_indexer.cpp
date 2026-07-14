@@ -78,7 +78,8 @@ IncrementalIndexer::IncrementalIndexer(const IndexerDependencies& dependencies,
       config_(config),
       source_repository_(dependencies.source_mysql, dependencies.mysql_timeout_ms),
       state_repository_(dependencies.state_mysql, dependencies.mysql_timeout_ms),
-      writer_(dependencies.storage.indexRoot()) {}
+      writer_(dependencies.storage.indexRoot()),
+      segment_store_(dependencies.storage) {}
 
 void IncrementalIndexer::recoverUnlocked() {
     std::vector<std::uint64_t> batch_ids;
@@ -271,6 +272,7 @@ RebuildStatus IncrementalIndexer::requestRebuild(std::uint64_t archive_id) {
     const RebuildStatus status = state_repository_.requestRebuild(archive_id, &batch_id);
     if (status == RebuildStatus::Queued) {
         writer_.remove(batch_id);
+        segment_store_.remove(batch_id);
         spdlog::info("event=parsing_batch_rebuild_queued archive_id={} batch_id={}", archive_id,
                      batch_id);
     }
