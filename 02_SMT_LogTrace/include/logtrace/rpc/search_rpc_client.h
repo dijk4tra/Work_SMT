@@ -30,6 +30,21 @@ struct RpcHealthResult {
     std::string message;
 };
 
+/// @brief Gateway 观察到的业务 RPC 传输状态。
+enum class RpcCallStatus {
+    Success,      ///< RPC 成功并返回业务响应。
+    Unavailable,  ///< 连接、传输或协议失败。
+    Timeout       ///< RPC 调用超时。
+};
+
+/// @brief 携带生成响应对象的业务 RPC 结果。
+/// @tparam Response Protobuf 响应类型。
+template <typename Response>
+struct RpcCallResult {
+    RpcCallStatus status;
+    Response response;
+};
+
 /// @brief 包装生成的 SRPC Client 并固定超时和零重试。
 class SearchRpcClient {
    public:
@@ -49,6 +64,39 @@ class SearchRpcClient {
     srpc::SRPCClientTask* createHealthTask(
         const std::string& request_id,
         const std::function<void(const RpcHealthResult&)>& callback) const;
+
+    /// @brief 创建异步日志检索任务。
+    /// @param request 已校验 Protobuf 请求。
+    /// @param callback 完成后接收传输状态和业务响应。
+    /// @return 尚未启动的 SRPC 任务。
+    srpc::SRPCClientTask* createSearchLogsTask(
+        const rpc::SearchLogsRequest& request,
+        const std::function<void(const RpcCallResult<rpc::SearchLogsResponse>&)>& callback) const;
+
+    /// @brief 创建异步异常日志任务。
+    /// @param request 已校验 Protobuf 请求。
+    /// @param callback 完成后接收传输状态和业务响应。
+    /// @return 尚未启动的 SRPC 任务。
+    srpc::SRPCClientTask* createListAnomaliesTask(
+        const rpc::ListAnomaliesRequest& request,
+        const std::function<void(const RpcCallResult<rpc::ListAnomaliesResponse>&)>& callback)
+        const;
+
+    /// @brief 创建异步日志详情任务。
+    /// @param request 已校验 Protobuf 请求。
+    /// @param callback 完成后接收传输状态和业务响应。
+    /// @return 尚未启动的 SRPC 任务。
+    srpc::SRPCClientTask* createGetLogDetailTask(
+        const rpc::GetLogDetailRequest& request,
+        const std::function<void(const RpcCallResult<rpc::GetLogDetailResponse>&)>& callback) const;
+
+    /// @brief 创建异步错误码知识任务。
+    /// @param request 已校验 Protobuf 请求。
+    /// @param callback 完成后接收传输状态和业务响应。
+    /// @return 尚未启动的 SRPC 任务。
+    srpc::SRPCClientTask* createGetErrorCodeTask(
+        const rpc::GetErrorCodeRequest& request,
+        const std::function<void(const RpcCallResult<rpc::GetErrorCodeResponse>&)>& callback) const;
 
    private:
     std::shared_ptr<rpc::LogSearchService::SRPCClient> client_;

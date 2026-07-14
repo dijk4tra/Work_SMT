@@ -27,6 +27,23 @@ TEST(ProtoContractTest, RoundTripsHealthMessages) {
     EXPECT_EQ(decoded.message(), "success");
 }
 
+TEST(ProtoContractTest, RoundTripsSearchMessages) {
+    rpc::SearchLogsRequest request;
+    request.set_request_id("request-1");
+    request.add_keywords("camera");
+    request.mutable_filter()->set_device_id("AOI-VT-01");
+    request.set_offset(10);
+    request.set_page_size(20);
+    std::string encoded;
+    ASSERT_TRUE(request.SerializeToString(&encoded));
+    rpc::SearchLogsRequest decoded;
+    ASSERT_TRUE(decoded.ParseFromString(encoded));
+    EXPECT_EQ(decoded.keywords(0), "camera");
+    EXPECT_EQ(decoded.filter().device_id(), "AOI-VT-01");
+    EXPECT_EQ(decoded.offset(), 10U);
+    EXPECT_EQ(decoded.page_size(), 20U);
+}
+
 }  // namespace
 }  // namespace logtrace
 }  // namespace smt

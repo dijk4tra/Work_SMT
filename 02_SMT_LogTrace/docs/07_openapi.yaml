@@ -1,62 +1,105 @@
 openapi: 3.0.3
 info:
   title: SMT LogTrace Gateway API
-  version: 0.1.0
-  description: 第一阶段机器可读契约；后续只在业务路由实际实现时扩展。
+  version: 0.4.0
+  description: 第四阶段已实现的健康检查、日志检索、异常、详情和错误码接口。
 paths:
   /health/live:
     get:
       summary: Gateway 进程存活检查
       responses:
-        '200':
-          description: 进程存活
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
+        '200': {description: 进程存活, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
   /health/ready:
     get:
-      summary: Search Server 及其依赖就绪检查
+      summary: Search Server 及依赖就绪检查
       responses:
-        '200':
-          description: 服务就绪
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        '502':
-          description: Search RPC 不可用
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        '503':
-          description: Search Server 依赖未就绪
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        '504':
-          description: Search RPC 超时
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
+        '200': {description: 服务就绪, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '502': {description: Search RPC 不可用}
+        '503': {description: Search Server 依赖未就绪}
+        '504': {description: Search RPC 超时}
+  /api/v1/logs/search:
+    post:
+      summary: 关键词 AND 与结构化组合查询
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SearchRequest'}
+      responses:
+        '200': {description: 查询成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+        '400': {description: 查询条件或分页非法}
+        '401': {description: Operator Token 无效}
+        '502': {description: Search RPC 不可用}
+        '504': {description: Search RPC 超时}
+  /api/v1/logs/anomalies:
+    get:
+      summary: WARN、ERROR 或带错误码的异常日志
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: device_id, in: query, schema: {type: string}}
+        - {name: work_order, in: query, schema: {type: string}}
+        - {name: product_sn, in: query, schema: {type: string}}
+        - {name: error_code, in: query, schema: {type: string}}
+        - {name: levels, in: query, description: 逗号分隔, schema: {type: string}}
+        - {name: occurred_from, in: query, schema: {type: string, format: date-time}}
+        - {name: occurred_to, in: query, schema: {type: string, format: date-time}}
+        - {name: offset, in: query, required: true, schema: {type: integer, minimum: 0}}
+        - {name: page_size, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: 查询成功}
+        '400': {description: 查询条件或分页非法}
+        '401': {description: Operator Token 无效}
+  /api/v1/logs/{doc_id}:
+    get:
+      summary: 查询日志结构化详情和原始记录
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: doc_id, in: path, required: true, schema: {type: integer, format: uint64}}
+      responses:
+        '200': {description: 查询成功}
+        '401': {description: Operator Token 无效}
+        '404': {description: 文档不存在}
+        '500': {description: 原始归档读取失败}
+  /api/v1/error-codes/{code}:
+    get:
+      summary: 查询错误码知识及最近五条匹配日志
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string, maxLength: 64}}
+      responses:
+        '200': {description: 查询成功}
+        '401': {description: Operator Token 无效}
+        '404': {description: 错误码不存在}
+        '503': {description: 状态 MySQL 不可用}
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
   schemas:
+    SearchRequest:
+      type: object
+      required: [keywords, offset, page_size]
+      properties:
+        keywords: {type: array, maxItems: 8, items: {type: string, maxLength: 64}}
+        line_id: {type: string, nullable: true}
+        station_id: {type: string, nullable: true}
+        device_id: {type: string, nullable: true}
+        work_order: {type: string, nullable: true}
+        product_sn: {type: string, nullable: true}
+        levels: {type: array, nullable: true, items: {type: string, enum: [INFO, WARN, ERROR]}}
+        module_name: {type: string, nullable: true}
+        error_code: {type: string, nullable: true}
+        occurred_from: {type: string, format: date-time, nullable: true}
+        occurred_to: {type: string, format: date-time, nullable: true}
+        offset: {type: integer, minimum: 0}
+        page_size: {type: integer, minimum: 1, maximum: 200}
     ApiResponse:
       type: object
       required: [code, message, request_id, data]
       properties:
-        code:
-          type: string
-        message:
-          type: string
-        request_id:
-          type: string
-        data:
-          nullable: true
-          oneOf:
-            - type: object
-            - type: array
-            - type: string
+        code: {type: string}
+        message: {type: string}
+        request_id: {type: string}
+        data: {nullable: true}

@@ -42,11 +42,71 @@ RpcHealthResult classifyFailure(int timeout_reason) {
     return RpcHealthResult{RpcHealthStatus::Unavailable, "search RPC is unavailable"};
 }
 
+RpcCallStatus classifyCallFailure(int timeout_reason) {
+    return timeout_reason == TOR_NOT_TIMEOUT ? RpcCallStatus::Unavailable : RpcCallStatus::Timeout;
+}
+
 }  // namespace
 
 SearchRpcClient::SearchRpcClient(const GatewayConfig& config) {
     const srpc::RPCClientParams params = makeClientParams(config);
     client_.reset(new rpc::LogSearchService::SRPCClient(&params));
+}
+
+srpc::SRPCClientTask* SearchRpcClient::createSearchLogsTask(
+    const rpc::SearchLogsRequest& request,
+    const std::function<void(const RpcCallResult<rpc::SearchLogsResponse>&)>& callback) const {
+    srpc::SRPCClientTask* task = client_->create_SearchLogs_task(
+        [callback](rpc::SearchLogsResponse* response, srpc::RPCContext* context) {
+            callback(RpcCallResult<rpc::SearchLogsResponse>{
+                context->success() ? RpcCallStatus::Success
+                                   : classifyCallFailure(context->get_timeout_reason()),
+                context->success() ? *response : rpc::SearchLogsResponse()});
+        });
+    task->serialize_input(&request);
+    return task;
+}
+
+srpc::SRPCClientTask* SearchRpcClient::createListAnomaliesTask(
+    const rpc::ListAnomaliesRequest& request,
+    const std::function<void(const RpcCallResult<rpc::ListAnomaliesResponse>&)>& callback) const {
+    srpc::SRPCClientTask* task = client_->create_ListAnomalies_task(
+        [callback](rpc::ListAnomaliesResponse* response, srpc::RPCContext* context) {
+            callback(RpcCallResult<rpc::ListAnomaliesResponse>{
+                context->success() ? RpcCallStatus::Success
+                                   : classifyCallFailure(context->get_timeout_reason()),
+                context->success() ? *response : rpc::ListAnomaliesResponse()});
+        });
+    task->serialize_input(&request);
+    return task;
+}
+
+srpc::SRPCClientTask* SearchRpcClient::createGetLogDetailTask(
+    const rpc::GetLogDetailRequest& request,
+    const std::function<void(const RpcCallResult<rpc::GetLogDetailResponse>&)>& callback) const {
+    srpc::SRPCClientTask* task = client_->create_GetLogDetail_task(
+        [callback](rpc::GetLogDetailResponse* response, srpc::RPCContext* context) {
+            callback(RpcCallResult<rpc::GetLogDetailResponse>{
+                context->success() ? RpcCallStatus::Success
+                                   : classifyCallFailure(context->get_timeout_reason()),
+                context->success() ? *response : rpc::GetLogDetailResponse()});
+        });
+    task->serialize_input(&request);
+    return task;
+}
+
+srpc::SRPCClientTask* SearchRpcClient::createGetErrorCodeTask(
+    const rpc::GetErrorCodeRequest& request,
+    const std::function<void(const RpcCallResult<rpc::GetErrorCodeResponse>&)>& callback) const {
+    srpc::SRPCClientTask* task = client_->create_GetErrorCode_task(
+        [callback](rpc::GetErrorCodeResponse* response, srpc::RPCContext* context) {
+            callback(RpcCallResult<rpc::GetErrorCodeResponse>{
+                context->success() ? RpcCallStatus::Success
+                                   : classifyCallFailure(context->get_timeout_reason()),
+                context->success() ? *response : rpc::GetErrorCodeResponse()});
+        });
+    task->serialize_input(&request);
+    return task;
 }
 
 RpcHealthResult SearchRpcClient::health(const std::string& request_id) const {

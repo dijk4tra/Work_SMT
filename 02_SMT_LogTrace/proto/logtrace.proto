@@ -18,6 +18,104 @@ message HealthResponse {
   string message = 3;
 }
 
+message SearchFilter {
+  string line_id = 1;
+  string station_id = 2;
+  string device_id = 3;
+  string work_order = 4;
+  string product_sn = 5;
+  repeated string levels = 6;
+  string module_name = 7;
+  string error_code = 8;
+  bool has_time_range = 9;
+  int64 occurred_from_ms = 10;
+  int64 occurred_to_ms = 11;
+}
+
+message LogSummary {
+  uint64 doc_id = 1;
+  double score = 2;
+  string occurred_at = 3;
+  string archived_at = 4;
+  string line_id = 5;
+  string station_id = 6;
+  string device_id = 7;
+  string collector_id = 8;
+  string work_order = 9;
+  string product_sn = 10;
+  string source_type = 11;
+  string level = 12;
+  string module_name = 13;
+  string error_code = 14;
+  string event_name = 15;
+}
+
+message SearchLogsRequest {
+  string request_id = 1;
+  repeated string keywords = 2;
+  SearchFilter filter = 3;
+  uint32 offset = 4;
+  uint32 page_size = 5;
+}
+
+message SearchLogsResponse {
+  string code = 1;
+  string message = 2;
+  uint64 snapshot_version = 3;
+  uint64 total_hits = 4;
+  repeated LogSummary items = 5;
+}
+
+message ListAnomaliesRequest {
+  string request_id = 1;
+  SearchFilter filter = 2;
+  uint32 offset = 3;
+  uint32 page_size = 4;
+}
+
+message ListAnomaliesResponse {
+  string code = 1;
+  string message = 2;
+  uint64 snapshot_version = 3;
+  uint64 total_hits = 4;
+  repeated LogSummary items = 5;
+}
+
+message GetLogDetailRequest {
+  string request_id = 1;
+  uint64 doc_id = 2;
+}
+
+message GetLogDetailResponse {
+  string code = 1;
+  string message = 2;
+  LogSummary document = 3;
+  uint64 archive_id = 4;
+  uint64 byte_offset = 5;
+  uint64 byte_length = 6;
+  string raw = 7;
+}
+
+message GetErrorCodeRequest {
+  string request_id = 1;
+  string error_code = 2;
+}
+
+message GetErrorCodeResponse {
+  string code = 1;
+  string message = 2;
+  string error_code = 3;
+  string module_name = 4;
+  string title = 5;
+  string description = 6;
+  string recommended_action = 7;
+  repeated LogSummary matching_logs = 8;
+}
+
 service LogSearchService {
   rpc Health(HealthRequest) returns (HealthResponse);
+  rpc SearchLogs(SearchLogsRequest) returns (SearchLogsResponse);
+  rpc ListAnomalies(ListAnomaliesRequest) returns (ListAnomaliesResponse);
+  rpc GetLogDetail(GetLogDetailRequest) returns (GetLogDetailResponse);
+  rpc GetErrorCode(GetErrorCodeRequest) returns (GetErrorCodeResponse);
 }

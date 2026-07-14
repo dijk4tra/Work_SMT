@@ -22,6 +22,8 @@ struct GatewayConfig {
     std::string rpc_host;
     std::uint16_t rpc_port;
     int rpc_timeout_ms;
+    std::string operator_token_env;
+    std::string operator_token;
 };
 
 /// @brief Search Server 的 SRPC 监听配置。

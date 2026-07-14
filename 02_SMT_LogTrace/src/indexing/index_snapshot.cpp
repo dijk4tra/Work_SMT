@@ -36,6 +36,10 @@ std::size_t IndexSnapshot::segmentCount() const { return segments_.size(); }
 
 std::size_t IndexSnapshot::documentCount() const { return document_count_; }
 
+const std::vector<std::shared_ptr<const LoadedSegment> >& IndexSnapshot::segments() const {
+    return segments_;
+}
+
 bool IndexSnapshot::findDocument(std::uint64_t doc_id, const SegmentDocumentRecord** document,
                                  const SegmentFileRecord** file) const {
     const std::uint64_t batch_id = doc_id >> 32;

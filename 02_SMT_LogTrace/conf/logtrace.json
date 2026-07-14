@@ -5,7 +5,8 @@
     "request_body_limit_bytes": 1048576,
     "rpc_host": "127.0.0.1",
     "rpc_port": 1413,
-    "rpc_timeout_ms": 1000
+    "rpc_timeout_ms": 1000,
+    "operator_token_env": "SMT_LOGTRACE_OPERATOR_TOKEN"
   },
   "search_rpc": {
     "listen_address": "127.0.0.1",

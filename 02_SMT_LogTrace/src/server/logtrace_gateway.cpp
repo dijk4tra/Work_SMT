@@ -16,10 +16,13 @@ namespace logtrace {
 LogTraceGateway::LogTraceGateway(const AppConfig& config)
     : config_(config),
       search_rpc_(config.gateway),
+      authenticator_(config.gateway.operator_token),
       health_controller_(search_rpc_),
+      search_controller_(authenticator_, search_rpc_),
       started_(false) {
     http_server_.request_size_limit(config.gateway.request_body_limit_bytes);
     health_controller_.registerRoutes(http_server_);
+    search_controller_.registerRoutes(http_server_);
 }
 
 void LogTraceGateway::initialize() {

@@ -18,6 +18,20 @@ const char* errorCodeName(ErrorCode code) {
             return "SEARCH_RPC_UNAVAILABLE";
         case ErrorCode::SearchRpcTimeout:
             return "SEARCH_RPC_TIMEOUT";
+        case ErrorCode::InvalidArgument:
+            return "INVALID_ARGUMENT";
+        case ErrorCode::OperatorTokenInvalid:
+            return "OPERATOR_TOKEN_INVALID";
+        case ErrorCode::LogNotFound:
+            return "LOG_NOT_FOUND";
+        case ErrorCode::ErrorCodeNotFound:
+            return "ERROR_CODE_NOT_FOUND";
+        case ErrorCode::IndexCorrupted:
+            return "INDEX_CORRUPTED";
+        case ErrorCode::StorageIoError:
+            return "STORAGE_IO_ERROR";
+        case ErrorCode::MySqlUnavailable:
+            return "MYSQL_UNAVAILABLE";
     }
     return "INTERNAL_ERROR";
 }
@@ -32,6 +46,18 @@ int httpStatus(ErrorCode code) {
             return 502;
         case ErrorCode::SearchRpcTimeout:
             return 504;
+        case ErrorCode::InvalidArgument:
+            return 400;
+        case ErrorCode::OperatorTokenInvalid:
+            return 401;
+        case ErrorCode::LogNotFound:
+        case ErrorCode::ErrorCodeNotFound:
+            return 404;
+        case ErrorCode::IndexCorrupted:
+        case ErrorCode::StorageIoError:
+            return 500;
+        case ErrorCode::MySqlUnavailable:
+            return 503;
     }
     return 500;
 }

@@ -171,7 +171,7 @@ AppConfig AppConfig::load(const std::string& path) {
         const Json& gateway = root.at("gateway");
         requireExactKeys(gateway,
                          {"listen_address", "port", "request_body_limit_bytes", "rpc_host",
-                          "rpc_port", "rpc_timeout_ms"},
+                          "rpc_port", "rpc_timeout_ms", "operator_token_env"},
                          "gateway");
         config.gateway.listen_address = requireString(gateway, "listen_address", "gateway");
         config.gateway.port =
@@ -183,6 +183,12 @@ AppConfig AppConfig::load(const std::string& path) {
             static_cast<std::uint16_t>(requireUnsigned(gateway, "rpc_port", 1, 65535, "gateway"));
         config.gateway.rpc_timeout_ms =
             static_cast<int>(requireUnsigned(gateway, "rpc_timeout_ms", 50, 30000, "gateway"));
+        config.gateway.operator_token_env = requireString(gateway, "operator_token_env", "gateway");
+        if (!isSimpleIdentifier(config.gateway.operator_token_env)) {
+            throw ConfigError("gateway.operator_token_env is invalid");
+        }
+        config.gateway.operator_token = requireEnvironment(
+            EnvironmentReference{config.gateway.operator_token_env, "gateway.operator_token_env"});
         if (!isSimpleHost(config.gateway.listen_address) ||
             !isSimpleHost(config.gateway.rpc_host)) {
             throw ConfigError("gateway address has invalid characters");

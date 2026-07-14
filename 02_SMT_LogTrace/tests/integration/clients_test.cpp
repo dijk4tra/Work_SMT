@@ -5,6 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+
 #include "logtrace/config/app_config.h"
 #include "logtrace/storage/mysql_client.h"
 #include "logtrace/storage/redis_client.h"
@@ -14,6 +16,7 @@ namespace logtrace {
 namespace {
 
 TEST(ClientsIntegrationTest, ConnectsToConfiguredServices) {
+    ASSERT_EQ(::setenv("SMT_LOGTRACE_OPERATOR_TOKEN", "integration-token", 1), 0);
     const AppConfig config = AppConfig::load(LOGTRACE_TEST_CONFIG_PATH);
     const MySqlClient source_mysql(config.source_mysql);
     const MySqlClient state_mysql(config.state_mysql);
@@ -25,6 +28,7 @@ TEST(ClientsIntegrationTest, ConnectsToConfiguredServices) {
 }
 
 TEST(ClientsIntegrationTest, ReportsUnavailableEndpoints) {
+    ASSERT_EQ(::setenv("SMT_LOGTRACE_OPERATOR_TOKEN", "integration-token", 1), 0);
     AppConfig config = AppConfig::load(LOGTRACE_TEST_CONFIG_PATH);
     config.source_mysql.port = 1;
     config.state_mysql.port = 1;

@@ -22,11 +22,13 @@ LogSearchServer::LogSearchServer(const AppConfig& config)
                config.indexing),
       snapshots_(),
       segment_manager_(state_mysql_, storage_, config.health.check_timeout_ms, snapshots_),
+      search_engine_(snapshots_, storage_),
       index_worker_(indexer_, segment_manager_, config.indexing.poll_interval_ms),
-      health_service_(SearchHealthDependencies{source_mysql_, state_mysql_, redis_, storage_},
-                      config.health.check_timeout_ms),
+      search_service_(
+          SearchHealthDependencies{source_mysql_, state_mysql_, redis_, storage_, search_engine_},
+          config.health.check_timeout_ms),
       started_(false) {
-    if (rpc_server_.add_service(&health_service_) != 0) {
+    if (rpc_server_.add_service(&search_service_) != 0) {
         throw std::runtime_error("cannot register LogSearchService");
     }
 }

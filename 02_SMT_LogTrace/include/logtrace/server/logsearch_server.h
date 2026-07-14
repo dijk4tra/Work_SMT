@@ -14,6 +14,7 @@
 #include "logtrace/indexing/index_worker.h"
 #include "logtrace/indexing/segment_manager.h"
 #include "logtrace/rpc/search_health_service.h"
+#include "logtrace/search/search_engine.h"
 #include "logtrace/storage/mysql_client.h"
 #include "logtrace/storage/redis_client.h"
 #include "logtrace/storage/storage_paths.h"
@@ -48,8 +49,9 @@ class LogSearchServer {
     IncrementalIndexer indexer_;
     IndexSnapshotStore snapshots_;
     SegmentManager segment_manager_;
+    SearchEngine search_engine_;
     IndexWorker index_worker_;
-    SearchHealthService health_service_;
+    SearchHealthService search_service_;
     srpc::SRPCServer rpc_server_;
     bool started_;
 };

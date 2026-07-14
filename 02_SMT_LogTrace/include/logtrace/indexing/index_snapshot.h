@@ -41,6 +41,10 @@ class IndexSnapshot {
     /// @return 文档总数。
     std::size_t documentCount() const;
 
+    /// @brief 返回按 batch_id 升序排列的不可变 Segment。
+    /// @return Segment shared_ptr 集合的常量引用。
+    const std::vector<std::shared_ptr<const LoadedSegment> >& segments() const;
+
     /// @brief 按稳定 doc_id 查找文档及所属文件。
     /// @param doc_id 批次高 32 位与局部编号低 32 位组成的文档编号。
     /// @param document 成功时接收文档指针。

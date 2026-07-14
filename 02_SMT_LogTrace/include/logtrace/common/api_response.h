@@ -19,7 +19,14 @@ enum class ErrorCode {
     Ok,                    ///< 请求成功。
     ServiceNotReady,       ///< Search Server 依赖未就绪。
     SearchRpcUnavailable,  ///< SRPC 连接或协议失败。
-    SearchRpcTimeout       ///< SRPC 请求超时。
+    SearchRpcTimeout,      ///< SRPC 请求超时。
+    InvalidArgument,       ///< HTTP 或 RPC 业务参数非法。
+    OperatorTokenInvalid,  ///< Operator Bearer Token 无效。
+    LogNotFound,           ///< 稳定 doc_id 不在当前快照。
+    ErrorCodeNotFound,     ///< 错误码知识库无此记录。
+    IndexCorrupted,        ///< 索引无法完成查询。
+    StorageIoError,        ///< 原始归档读取失败。
+    MySqlUnavailable       ///< 错误码知识库不可用。
 };
 
 /// @brief 返回业务码对应的稳定字符串。

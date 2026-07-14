@@ -59,6 +59,8 @@ target_link_libraries(logtrace_proto PUBLIC protobuf::libprotobuf ${SRPC_LIBRARY
 
 set(LOGTRACE_CORE_SOURCES
     src/api/health_controller.cpp
+    src/api/search_controller.cpp
+    src/auth/operator_authenticator.cpp
     src/common/api_response.cpp
     src/common/logging.cpp
     src/common/request_id.cpp
@@ -80,6 +82,7 @@ set(LOGTRACE_CORE_SOURCES
     src/indexing/term_tokenizer.cpp
     src/rpc/search_health_service.cpp
     src/rpc/search_rpc_client.cpp
+    src/search/search_engine.cpp
     src/server/logsearch_server.cpp
     src/server/logtrace_gateway.cpp
     src/storage/mysql_client.cpp

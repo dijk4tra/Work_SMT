@@ -9,6 +9,8 @@
 #include <wfrest/HttpServer.h>
 
 #include "logtrace/api/health_controller.h"
+#include "logtrace/api/search_controller.h"
+#include "logtrace/auth/operator_authenticator.h"
 #include "logtrace/config/app_config.h"
 #include "logtrace/rpc/search_rpc_client.h"
 
@@ -36,7 +38,9 @@ class LogTraceGateway {
    private:
     const AppConfig& config_;
     SearchRpcClient search_rpc_;
+    OperatorAuthenticator authenticator_;
     HealthController health_controller_;
+    SearchController search_controller_;
     wfrest::HttpServer http_server_;
     bool started_;
 };

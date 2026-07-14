@@ -4,10 +4,10 @@
 `01_SMT_DataStream` 已完成校验的归档元数据和不可变文件，对运行日志与 FCT 测试记录进行
 增量解析、倒排索引和结构化检索，并在命中后使用 `pread` 回读原始记录。
 
-当前版本已完成第一至第三阶段。Search Server 能按 `archive_id` 增量消费一期归档，从原子发布的
+当前版本已完成第一至第四阶段实现。Search Server 能按 `archive_id` 增量消费一期归档，从原子发布的
 `PARSED` 工件构建固定版本 Term、Posting、文档和文件表，并只将完整校验且数据库登记为
-`READY` 的不可变 Segment 加入查询快照。当前 Debug/Release 构建及完整 34 项测试已通过，等待用户
-确认第三阶段；BM25、Top-K、搜索 HTTP/RPC 和缓存仍属于后续阶段。
+`READY` 的不可变 Segment 加入查询快照。已提供低 DF 优先 AND、BM25、业务权重、Top-K、
+结构化过滤、错误码知识和原文详情 HTTP/RPC 业务链。SLRU 和 Redis 查询缓存仍属于第五阶段。
 
 ## 1. 与一期项目的关系
 
@@ -87,6 +87,7 @@ DataStream archive_file + archive_root
 11. `docs/11_第一期开发报告.md`
 12. `docs/12_第二期开发报告.md`
 13. `docs/13_第三期开发报告.md`
+14. `docs/14_第四期开发报告.md`
 
 根目录 `agent.md` 和 `代码注释规范.md` 对本项目同样生效。
 
@@ -104,6 +105,7 @@ set +a
 ```bash
 export SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD='<source-readonly-password>'
 export SMT_LOGTRACE_STATE_MYSQL_PASSWORD='<state-database-password>'
+export SMT_LOGTRACE_OPERATOR_TOKEN='<operator-bearer-token>'
 
 cmake -S . -B build \
   -DCMAKE_BUILD_TYPE=Debug \
@@ -129,7 +131,7 @@ cmake --build build --parallel 2
 ctest --test-dir build -N
 ```
 
-当前已确认共注册并通过 34 项测试，其中 30 项不依赖本机服务，另外 2 项验证真实 MySQL/Redis
+当前已确认共注册并通过 39 项测试，其中 35 项不依赖本机服务，另外 2 项验证真实 MySQL/Redis
 客户端，1 项验证 Search Server、Gateway、SRPC 和 HTTP 健康链路，1 项验证增量扫描、失败隔离、
 倒排 Segment、中断恢复、损坏拒绝、重建和 Search Server 后台轮询。
 
@@ -218,3 +220,16 @@ files.bin
 `segments/.building/segment_<batch_id>` 完成 `fsync` 和整段加载校验，再原子 `rename`。只有后续
 MySQL 原子更新为 `READY/INDEXED` 后才会交换内存快照。Segment 不保存完整正文；详情能力从
 `files.bin` 和 `documents.bin` 定位一期归档，使用循环 `pread` 回读精确字节。
+
+## 11. 第四阶段业务接口
+
+所有 `/api/v1` 业务路由要求 `Authorization: Bearer <token>`，令牌由
+`SMT_LOGTRACE_OPERATOR_TOKEN` 环境变量提供。已实现：
+
+- `POST /api/v1/logs/search`：关键词 AND、结构化过滤、BM25 和 Top-K；
+- `GET /api/v1/logs/anomalies`：WARN、ERROR 或带错误码的记录；
+- `GET /api/v1/logs/{doc_id}`：结构化详情和 `pread` 原文；
+- `GET /api/v1/error-codes/{code}`：错误码知识及最近五条匹配日志。
+
+`offset + page_size` 不得超过 1000。没有精确设备、工单、产品 SN 或错误码时，必须提供不超过
+31 天的时间范围。完整契约见 `docs/06_HTTP与RPC契约.md` 和 `docs/07_openapi.yaml`。

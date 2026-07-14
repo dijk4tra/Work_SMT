@@ -5,9 +5,11 @@ add_executable(
     unit/api_response_test.cpp
     unit/app_config_test.cpp
     unit/archive_parser_test.cpp
+    unit/operator_authenticator_test.cpp
     unit/parsed_batch_writer_test.cpp
     unit/proto_contract_test.cpp
     unit/segment_store_test.cpp
+    unit/search_engine_test.cpp
     unit/storage_paths_test.cpp
     unit/term_tokenizer_test.cpp
     unit/uri_utils_test.cpp
@@ -50,6 +52,7 @@ if(LOGTRACE_ENABLE_INTEGRATION_TESTS)
         COMMAND
             ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/e2e/indexing_e2e_test.py
             $<TARGET_FILE:logtrace_admin> $<TARGET_FILE:logsearch_server>
+            $<TARGET_FILE:logtrace_gateway>
             ${CMAKE_SOURCE_DIR}/conf/logtrace.json
             ${CMAKE_SOURCE_DIR}/tools/generate_phase2_samples.py
     )

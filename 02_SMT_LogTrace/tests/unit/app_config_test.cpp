@@ -41,12 +41,14 @@ class AppConfigTest : public testing::Test {
     void SetUp() override {
         ASSERT_EQ(::setenv("SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD", "source-unit-password", 1), 0);
         ASSERT_EQ(::setenv("SMT_LOGTRACE_STATE_MYSQL_PASSWORD", "state-unit-password", 1), 0);
+        ASSERT_EQ(::setenv("SMT_LOGTRACE_OPERATOR_TOKEN", "operator-unit-token", 1), 0);
     }
 
     /// @brief 清理环境变量和临时文件。
     void TearDown() override {
         ::unsetenv("SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD");
         ::unsetenv("SMT_LOGTRACE_STATE_MYSQL_PASSWORD");
+        ::unsetenv("SMT_LOGTRACE_OPERATOR_TOKEN");
         std::remove(temporary_path_.c_str());
     }
 
@@ -66,11 +68,17 @@ TEST_F(AppConfigTest, LoadsCompleteContract) {
     EXPECT_EQ(config.indexing.max_line_bytes, 65536U);
     EXPECT_EQ(config.source_mysql.password, "source-unit-password");
     EXPECT_EQ(config.state_mysql.password, "state-unit-password");
+    EXPECT_EQ(config.gateway.operator_token, "operator-unit-token");
     EXPECT_TRUE(config.redis.password.empty());
 }
 
 TEST_F(AppConfigTest, RejectsMissingStatePassword) {
     ASSERT_EQ(::unsetenv("SMT_LOGTRACE_STATE_MYSQL_PASSWORD"), 0);
+    EXPECT_THROW(AppConfig::load(LOGTRACE_TEST_CONFIG_PATH), ConfigError);
+}
+
+TEST_F(AppConfigTest, RejectsMissingOperatorToken) {
+    ASSERT_EQ(::unsetenv("SMT_LOGTRACE_OPERATOR_TOKEN"), 0);
     EXPECT_THROW(AppConfig::load(LOGTRACE_TEST_CONFIG_PATH), ConfigError);
 }
 

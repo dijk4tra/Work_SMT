@@ -41,9 +41,9 @@ Gateway 调用 `LogSearchService.Health`。Search Server 异步检查：
 
 请求包含 `request_id`。响应状态为 READY 或 NOT_READY，并返回稳定 `code` 与非敏感说明。
 
-## 3. 第四阶段目标 HTTP 接口
+## 3. 第四阶段已实现 HTTP 接口
 
-以下接口当前只作为已确认外部契约，不在第一阶段注册路由：
+以下路由已注册，并统一要求部署级 `Authorization: Bearer <token>`：
 
 | 方法与路径 | 用途 |
 |---|---|
@@ -75,9 +75,9 @@ Gateway 调用 `LogSearchService.Health`。Search Server 异步检查：
 关键词为 AND。`offset + page_size` 不得超过 1000。没有精确设备、工单、SN 或错误码时必须提供
 有限时间范围，避免无界扫描。
 
-## 4. 目标 RPC 方法
+## 4. 已实现 RPC 方法
 
-第四阶段在当前 `Health` 之外增加：
+第四阶段在 `Health` 之外已增加：
 
 - `SearchLogs`；
 - `ListAnomalies`；

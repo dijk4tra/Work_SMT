@@ -24,6 +24,11 @@ TEST(ApiResponseTest, MapsHealthRpcOutcomes) {
     EXPECT_EQ(httpStatus(ErrorCode::ServiceNotReady), 503);
     EXPECT_EQ(httpStatus(ErrorCode::SearchRpcUnavailable), 502);
     EXPECT_EQ(httpStatus(ErrorCode::SearchRpcTimeout), 504);
+    EXPECT_EQ(httpStatus(ErrorCode::InvalidArgument), 400);
+    EXPECT_EQ(httpStatus(ErrorCode::OperatorTokenInvalid), 401);
+    EXPECT_EQ(httpStatus(ErrorCode::LogNotFound), 404);
+    EXPECT_EQ(httpStatus(ErrorCode::IndexCorrupted), 500);
+    EXPECT_EQ(httpStatus(ErrorCode::MySqlUnavailable), 503);
 }
 
 TEST(ApiResponseTest, GeneratesRandomHexRequestIds) {

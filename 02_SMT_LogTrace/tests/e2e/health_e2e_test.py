@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -50,6 +51,7 @@ def stop_process(process):
 
 
 def main():
+    os.environ.setdefault("SMT_LOGTRACE_OPERATOR_TOKEN", "health-e2e-token")
     if len(sys.argv) != 4:
         raise SystemExit(
             "usage: health_e2e_test.py <search-binary> <gateway-binary> <config>"

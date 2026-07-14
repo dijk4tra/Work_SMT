@@ -7,6 +7,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -72,6 +74,35 @@ def stop_process(process):
         process.wait(timeout=5)
 
 
+def wait_for_port(port, process, timeout_seconds=8):
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"process exited early with code {process.returncode}")
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                return
+        except OSError:
+            time.sleep(0.05)
+    raise RuntimeError(f"port {port} did not become ready")
+
+
+def http_json(url, token=None, method="GET", body=None):
+    headers = {}
+    if token is not None:
+        headers["Authorization"] = f"Bearer {token}"
+    data = None
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read().decode("utf-8"))
+
+
 def query(config, section, database, sql):
     password_name = config[section]["password_env"]
     result = run(
@@ -82,15 +113,18 @@ def query(config, section, database, sql):
 
 
 def main():
-    if len(sys.argv) != 5:
+    os.environ.setdefault("SMT_LOGTRACE_OPERATOR_TOKEN", "indexing-e2e-token")
+    if len(sys.argv) != 6:
         raise SystemExit(
-            "usage: indexing_e2e_test.py <admin-binary> <search-binary> <base-config> <generator>"
+            "usage: indexing_e2e_test.py <admin-binary> <search-binary> "
+            "<gateway-binary> <base-config> <generator>"
         )
 
     admin_binary = Path(sys.argv[1]).resolve()
     search_binary = Path(sys.argv[2]).resolve()
-    base_config_path = Path(sys.argv[3]).resolve()
-    generator = Path(sys.argv[4]).resolve()
+    gateway_binary = Path(sys.argv[3]).resolve()
+    base_config_path = Path(sys.argv[4]).resolve()
+    generator = Path(sys.argv[5]).resolve()
     project_root = base_config_path.parent.parent
     db_script = project_root / "scripts" / "db.sh"
     base_config = json.loads(base_config_path.read_text(encoding="utf-8"))
@@ -106,6 +140,8 @@ def main():
         config["storage"]["archive_root"] = str(root / "samples" / "archive")
         config["storage"]["index_root"] = str(root / "index")
         config["search_rpc"]["port"] = allocate_port()
+        config["gateway"]["rpc_port"] = config["search_rpc"]["port"]
+        config["gateway"]["port"] = allocate_port()
         config["indexing"]["poll_interval_ms"] = 100
         config["logging"]["search_file"] = str(root / "search.log")
         config["logging"]["gateway_file"] = str(root / "gateway.log")
@@ -229,6 +265,72 @@ CREATE TABLE archive_file (
                 "postings.bin",
                 "terms.bin",
             ]
+
+            api_search_log = (root / "api-search.log").open("wb")
+            api_gateway_log = (root / "api-gateway.log").open("wb")
+            api_search = subprocess.Popen(
+                [str(search_binary), "--config", str(config_path)],
+                env=env,
+                stdout=api_search_log,
+                stderr=subprocess.STDOUT,
+            )
+            api_gateway = None
+            try:
+                wait_for_port(config["search_rpc"]["port"], api_search)
+                api_gateway = subprocess.Popen(
+                    [str(gateway_binary), "--config", str(config_path)],
+                    env=env,
+                    stdout=api_gateway_log,
+                    stderr=subprocess.STDOUT,
+                )
+                wait_for_port(config["gateway"]["port"], api_gateway)
+                base_url = f"http://127.0.0.1:{config['gateway']['port']}"
+                status, response = http_json(
+                    f"{base_url}/api/v1/logs/search",
+                    method="POST",
+                    body={
+                        "keywords": ["inspection", "ng"],
+                        "device_id": "AOI-VT-01",
+                        "offset": 0,
+                        "page_size": 10,
+                    },
+                )
+                assert status == 401 and response["code"] == "OPERATOR_TOKEN_INVALID"
+                status, response = http_json(
+                    f"{base_url}/api/v1/logs/search",
+                    token="indexing-e2e-token",
+                    method="POST",
+                    body={
+                        "keywords": ["inspection", "ng"],
+                        "device_id": "AOI-VT-01",
+                        "offset": 0,
+                        "page_size": 10,
+                    },
+                )
+                assert status == 200 and response["data"]["total_hits"] == 1
+                doc_id = response["data"]["items"][0]["doc_id"]
+                assert response["data"]["items"][0]["error_code"] == "INSPECTION_NG"
+                status, response = http_json(
+                    f"{base_url}/api/v1/logs/anomalies?device_id=AOI-VT-01&offset=0&page_size=10",
+                    token="indexing-e2e-token",
+                )
+                assert status == 200 and response["data"]["total_hits"] == 1
+                status, response = http_json(
+                    f"{base_url}/api/v1/logs/{doc_id}", token="indexing-e2e-token"
+                )
+                assert status == 200 and "code=INSPECTION_NG" in response["data"]["raw"]
+                status, response = http_json(
+                    f"{base_url}/api/v1/error-codes/INSPECTION_NG",
+                    token="indexing-e2e-token",
+                )
+                assert status == 200 and response["data"]["module_name"] == "inspection"
+                assert len(response["data"]["matching_logs"]) == 1
+            finally:
+                if api_gateway is not None:
+                    stop_process(api_gateway)
+                stop_process(api_search)
+                api_search_log.close()
+                api_gateway_log.close()
 
             second = run(
                 [str(admin_binary), "--config", str(config_path), "scan-once"], env=env
