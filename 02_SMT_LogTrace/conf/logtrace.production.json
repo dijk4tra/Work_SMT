@@ -5,7 +5,8 @@
     "request_body_limit_bytes": 1048576,
     "rpc_host": "127.0.0.1",
     "rpc_port": 1413,
-    "rpc_timeout_ms": 1000
+    "rpc_timeout_ms": 1000,
+    "operator_token_env": "SMT_LOGTRACE_OPERATOR_TOKEN"
   },
   "search_rpc": {
     "listen_address": "127.0.0.1",
@@ -45,6 +46,16 @@
     "source_batch_limit": 100,
     "document_batch_limit": 100000,
     "max_line_bytes": 65536
+  },
+  "cache": {
+    "probation_capacity": 4096,
+    "protected_capacity": 12288,
+    "max_detail_bytes": 65536,
+    "active_window_seconds": 7200,
+    "active_ttl_seconds": 30,
+    "active_empty_ttl_seconds": 10,
+    "historical_ttl_seconds": 600,
+    "historical_empty_ttl_seconds": 300
   },
   "logging": {
     "level": "info",

@@ -10,6 +10,7 @@
 #include <map>
 #include <queue>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -99,8 +100,13 @@ double businessWeight(const SegmentDocumentRecord& document, const SearchQuery& 
 
 }  // namespace
 
-SearchEngine::SearchEngine(const IndexSnapshotStore& snapshots, const StoragePaths& storage)
-    : snapshots_(snapshots), storage_(storage) {}
+SearchEngine::SearchEngine(const IndexSnapshotStore& snapshots, const StoragePaths& storage,
+                           const CacheConfig& cache_config)
+    : snapshots_(snapshots),
+      storage_(storage),
+      max_detail_bytes_(cache_config.max_detail_bytes),
+      detail_cache_(cache_config.probation_capacity, cache_config.protected_capacity),
+      file_cache_(cache_config.probation_capacity, cache_config.protected_capacity) {}
 
 SearchPage SearchEngine::search(const SearchQuery& query) const {
     if (query.page_size == 0 || query.offset > 1000 || query.page_size > 1000 - query.offset) {
@@ -223,15 +229,54 @@ SearchPage SearchEngine::search(const SearchQuery& query) const {
 
 LogDetail SearchEngine::detail(std::uint64_t doc_id) const {
     const std::shared_ptr<const IndexSnapshot> snapshot = snapshots_.current();
+    std::ostringstream key_stream;
+    key_stream << snapshot->version() << ':' << doc_id;
+    const std::string key = key_stream.str();
+    LogDetail cached;
+    if (detail_cache_.get(key, &cached)) return cached;
     const SegmentDocumentRecord* document = nullptr;
     const SegmentFileRecord* file = nullptr;
     if (!snapshot->findDocument(doc_id, &document, &file)) {
         throw std::out_of_range("document is not present in current READY snapshot");
     }
-    return LogDetail{
-        *document, *file,
-        readOriginalRecord(storage_, *file, document->byte_offset, document->byte_length)};
+    std::ostringstream file_key_stream;
+    file_key_stream << snapshot->version() << ':' << file->archive_id;
+    const std::string file_key = file_key_stream.str();
+    SegmentFileRecord cached_file;
+    if (!file_cache_.get(file_key, &cached_file)) {
+        cached_file = *file;
+        file_cache_.put(file_key, cached_file);
+    }
+    LogDetail result{
+        *document, cached_file,
+        readOriginalRecord(storage_, cached_file, document->byte_offset, document->byte_length)};
+    if (result.raw.size() <= max_detail_bytes_) detail_cache_.put(key, result);
+    return result;
 }
+
+SearchPage SearchEngine::restore(std::uint64_t snapshot_version, std::size_t total_hits,
+                                 const std::vector<std::uint64_t>& doc_ids,
+                                 const std::vector<double>& scores) const {
+    if (doc_ids.size() != scores.size()) {
+        throw std::out_of_range("cached search vectors have different sizes");
+    }
+    const std::shared_ptr<const IndexSnapshot> snapshot = snapshots_.current();
+    if (snapshot->version() != snapshot_version) {
+        throw std::out_of_range("cached search snapshot is stale");
+    }
+    SearchPage page{snapshot_version, total_hits, std::vector<SearchHit>()};
+    for (std::size_t index = 0; index < doc_ids.size(); ++index) {
+        const SegmentDocumentRecord* document = nullptr;
+        const SegmentFileRecord* file = nullptr;
+        if (!snapshot->findDocument(doc_ids[index], &document, &file)) {
+            throw std::out_of_range("cached document is absent from snapshot");
+        }
+        page.items.push_back(SearchHit{*document, scores[index]});
+    }
+    return page;
+}
+
+std::uint64_t SearchEngine::snapshotVersion() const { return snapshots_.current()->version(); }
 
 }  // namespace logtrace
 }  // namespace smt

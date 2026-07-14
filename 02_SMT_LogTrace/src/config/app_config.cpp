@@ -164,7 +164,7 @@ AppConfig AppConfig::load(const std::string& path) {
     try {
         requireExactKeys(root,
                          {"gateway", "search_rpc", "source_mysql", "state_mysql", "redis",
-                          "storage", "health", "indexing", "logging"},
+                          "storage", "health", "indexing", "cache", "logging"},
                          "config");
         AppConfig config;
 
@@ -263,6 +263,29 @@ AppConfig AppConfig::load(const std::string& path) {
             requireUnsigned(indexing, "document_batch_limit", 1, 100000, "indexing"));
         config.indexing.max_line_bytes = static_cast<std::size_t>(
             requireUnsigned(indexing, "max_line_bytes", 256, 1024ULL * 1024, "indexing"));
+
+        const Json& cache = root.at("cache");
+        requireExactKeys(cache,
+                         {"probation_capacity", "protected_capacity", "max_detail_bytes",
+                          "active_window_seconds", "active_ttl_seconds", "active_empty_ttl_seconds",
+                          "historical_ttl_seconds", "historical_empty_ttl_seconds"},
+                         "cache");
+        config.cache.probation_capacity = static_cast<std::size_t>(
+            requireUnsigned(cache, "probation_capacity", 1, 1000000, "cache"));
+        config.cache.protected_capacity = static_cast<std::size_t>(
+            requireUnsigned(cache, "protected_capacity", 1, 1000000, "cache"));
+        config.cache.max_detail_bytes = static_cast<std::size_t>(
+            requireUnsigned(cache, "max_detail_bytes", 256, 1024ULL * 1024, "cache"));
+        config.cache.active_window_seconds =
+            static_cast<int>(requireUnsigned(cache, "active_window_seconds", 60, 86400, "cache"));
+        config.cache.active_ttl_seconds =
+            static_cast<int>(requireUnsigned(cache, "active_ttl_seconds", 1, 3600, "cache"));
+        config.cache.active_empty_ttl_seconds =
+            static_cast<int>(requireUnsigned(cache, "active_empty_ttl_seconds", 1, 3600, "cache"));
+        config.cache.historical_ttl_seconds =
+            static_cast<int>(requireUnsigned(cache, "historical_ttl_seconds", 1, 86400, "cache"));
+        config.cache.historical_empty_ttl_seconds = static_cast<int>(
+            requireUnsigned(cache, "historical_empty_ttl_seconds", 1, 86400, "cache"));
 
         const Json& logging = root.at("logging");
         requireExactKeys(

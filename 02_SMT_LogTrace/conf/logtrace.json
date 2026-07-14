@@ -47,6 +47,16 @@
     "document_batch_limit": 100000,
     "max_line_bytes": 65536
   },
+  "cache": {
+    "probation_capacity": 256,
+    "protected_capacity": 768,
+    "max_detail_bytes": 65536,
+    "active_window_seconds": 7200,
+    "active_ttl_seconds": 30,
+    "active_empty_ttl_seconds": 10,
+    "historical_ttl_seconds": 600,
+    "historical_empty_ttl_seconds": 300
+  },
   "logging": {
     "level": "info",
     "gateway_file": "./logs/logtrace_gateway.log",

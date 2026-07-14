@@ -8,8 +8,10 @@ add_executable(
     unit/operator_authenticator_test.cpp
     unit/parsed_batch_writer_test.cpp
     unit/proto_contract_test.cpp
+    unit/query_cache_test.cpp
     unit/segment_store_test.cpp
     unit/search_engine_test.cpp
+    unit/slru_cache_test.cpp
     unit/storage_paths_test.cpp
     unit/term_tokenizer_test.cpp
     unit/uri_utils_test.cpp
@@ -20,6 +22,10 @@ target_compile_definitions(
     logtrace_unit_tests
     PRIVATE LOGTRACE_TEST_CONFIG_PATH="${CMAKE_SOURCE_DIR}/conf/logtrace.json"
 )
+
+add_executable(logtrace_search_load_test performance/search_load_test.cpp)
+target_link_libraries(logtrace_search_load_test PRIVATE logtrace_core)
+target_compile_options(logtrace_search_load_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 gtest_discover_tests(logtrace_unit_tests DISCOVERY_MODE PRE_TEST)
 
 if(LOGTRACE_ENABLE_INTEGRATION_TESTS)

@@ -66,6 +66,8 @@ TEST_F(AppConfigTest, LoadsCompleteContract) {
     EXPECT_EQ(config.indexing.source_batch_limit, 100U);
     EXPECT_EQ(config.indexing.document_batch_limit, 100000U);
     EXPECT_EQ(config.indexing.max_line_bytes, 65536U);
+    EXPECT_EQ(config.cache.active_window_seconds, 7200);
+    EXPECT_EQ(config.cache.historical_empty_ttl_seconds, 300);
     EXPECT_EQ(config.source_mysql.password, "source-unit-password");
     EXPECT_EQ(config.state_mysql.password, "state-unit-password");
     EXPECT_EQ(config.gateway.operator_token, "operator-unit-token");
@@ -117,6 +119,14 @@ TEST_F(AppConfigTest, RejectsSharedLogFile) {
 TEST_F(AppConfigTest, RejectsOversizedSourceBatch) {
     nlohmann::json content = readExampleConfig();
     content["indexing"]["source_batch_limit"] = 101;
+    temporary_path_ = writeTemporaryConfig(content);
+
+    EXPECT_THROW(AppConfig::load(temporary_path_), ConfigError);
+}
+
+TEST_F(AppConfigTest, RejectsZeroCacheCapacity) {
+    nlohmann::json content = readExampleConfig();
+    content["cache"]["probation_capacity"] = 0;
     temporary_path_ = writeTemporaryConfig(content);
 
     EXPECT_THROW(AppConfig::load(temporary_path_), ConfigError);

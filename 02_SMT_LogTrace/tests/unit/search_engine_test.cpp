@@ -78,7 +78,8 @@ TEST(SearchEngineTest, AppliesAndBm25AndStableTopKPagination) {
     IndexSnapshotStore snapshots;
     snapshots.replace(std::shared_ptr<const IndexSnapshot>(new IndexSnapshot(segments)));
     const StoragePaths storage(StorageConfig{"/tmp", "/tmp/logtrace-search-test-index"});
-    const SearchEngine engine(snapshots, storage);
+    const CacheConfig cache{8, 8, 65536, 7200, 30, 10, 600, 300};
+    const SearchEngine engine(snapshots, storage, cache);
 
     SearchQuery query = baseQuery();
     query.keywords.push_back("CAMERA");
@@ -100,7 +101,8 @@ TEST(SearchEngineTest, AppliesBusinessWeightsFiltersAndAnomalyRule) {
     IndexSnapshotStore snapshots;
     snapshots.replace(std::shared_ptr<const IndexSnapshot>(new IndexSnapshot(segments)));
     const StoragePaths storage(StorageConfig{"/tmp", "/tmp/logtrace-search-test-index"});
-    const SearchEngine engine(snapshots, storage);
+    const CacheConfig cache{8, 8, 65536, 7200, 30, 10, 600, 300};
+    const SearchEngine engine(snapshots, storage, cache);
 
     SearchQuery query = baseQuery();
     query.anomaly_only = true;

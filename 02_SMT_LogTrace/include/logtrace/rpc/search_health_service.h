@@ -7,6 +7,8 @@
 #define LOGTRACE_RPC_SEARCH_HEALTH_SERVICE_H_
 
 #include "logtrace.srpc.h"
+#include "logtrace/cache/query_cache.h"
+#include "logtrace/cache/slru_cache.h"
 #include "logtrace/search/search_engine.h"
 #include "logtrace/storage/mysql_client.h"
 #include "logtrace/storage/redis_client.h"
@@ -22,6 +24,16 @@ struct SearchHealthDependencies {
     const RedisClient& redis;
     const StoragePaths& storage;
     const SearchEngine& search_engine;
+    const RedisConfig& redis_config;
+    const CacheConfig& cache_config;
+};
+
+/// @brief 错误码知识库的一条可缓存记录。
+struct ErrorCodeKnowledge {
+    std::string module_name;
+    std::string title;
+    std::string description;
+    std::string recommended_action;
 };
 
 /// @brief 异步检查两个 MySQL、Redis 和目录状态。
@@ -73,6 +85,8 @@ class SearchHealthService final : public rpc::LogSearchService::Service {
     const RedisClient& redis_;
     const StoragePaths& storage_;
     const SearchEngine& search_engine_;
+    QueryCache query_cache_;
+    SlruCache<std::string, ErrorCodeKnowledge> error_code_cache_;
     int timeout_ms_;
 };
 

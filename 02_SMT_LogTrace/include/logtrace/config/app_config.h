@@ -72,6 +72,18 @@ struct IndexingConfig {
     std::size_t max_line_bytes;
 };
 
+/// @brief 本地 SLRU 和 Redis 查询结果缓存配置。
+struct CacheConfig {
+    std::size_t probation_capacity;
+    std::size_t protected_capacity;
+    std::size_t max_detail_bytes;
+    int active_window_seconds;
+    int active_ttl_seconds;
+    int active_empty_ttl_seconds;
+    int historical_ttl_seconds;
+    int historical_empty_ttl_seconds;
+};
+
 /// @brief 双进程日志输出配置。
 struct LoggingConfig {
     std::string level;
@@ -91,6 +103,7 @@ struct AppConfig {
     StorageConfig storage;
     HealthConfig health;
     IndexingConfig indexing;
+    CacheConfig cache;
     LoggingConfig logging;
 
     /// @brief 从 JSON 文件和环境变量加载完整配置。

@@ -6,6 +6,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -87,6 +88,47 @@ def wait_for_port(port, process, timeout_seconds=8):
     raise RuntimeError(f"port {port} did not become ready")
 
 
+class PingOnlyRedis:
+    def __init__(self, port):
+        self.port = port
+        self.enabled = True
+        self.listener = None
+        self.thread = None
+
+    def start(self):
+        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.listener.bind(("127.0.0.1", self.port))
+        self.listener.listen()
+        self.listener.settimeout(0.1)
+        self.thread = threading.Thread(target=self._serve, daemon=True)
+        self.thread.start()
+
+    def _serve(self):
+        while self.enabled:
+            try:
+                connection, _ = self.listener.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            with connection:
+                connection.settimeout(0.5)
+                try:
+                    request = connection.recv(4096).upper()
+                    if b"PING" in request:
+                        connection.sendall(b"+PONG\r\n")
+                except OSError:
+                    pass
+
+    def stop(self):
+        self.enabled = False
+        if self.listener is not None:
+            self.listener.close()
+        if self.thread is not None:
+            self.thread.join(timeout=1)
+
+
 def http_json(url, token=None, method="GET", body=None):
     headers = {}
     if token is not None:
@@ -143,6 +185,7 @@ def main():
         config["gateway"]["rpc_port"] = config["search_rpc"]["port"]
         config["gateway"]["port"] = allocate_port()
         config["indexing"]["poll_interval_ms"] = 100
+        config["redis"]["key_prefix"] = f"smt:logtrace:e2e:{suffix}:"
         config["logging"]["search_file"] = str(root / "search.log")
         config["logging"]["gateway_file"] = str(root / "gateway.log")
         config_path = root / "logtrace.json"
@@ -308,6 +351,58 @@ CREATE TABLE archive_file (
                     },
                 )
                 assert status == 200 and response["data"]["total_hits"] == 1
+                first_search_data = response["data"]
+                redis_command = [
+                    "redis-cli",
+                    "--raw",
+                    "-h",
+                    config["redis"]["host"],
+                    "-p",
+                    str(config["redis"]["port"]),
+                    "--scan",
+                    "--pattern",
+                    f"{config['redis']['key_prefix']}query:v1:1:*",
+                ]
+                keys = run(redis_command).stdout.splitlines()
+                assert len(keys) == 1
+                status, response = http_json(
+                    f"{base_url}/api/v1/logs/search",
+                    token="indexing-e2e-token",
+                    method="POST",
+                    body={
+                        "keywords": ["NG", "inspection"],
+                        "device_id": "AOI-VT-01",
+                        "offset": 0,
+                        "page_size": 10,
+                    },
+                )
+                assert status == 200 and response["data"] == first_search_data
+                run(
+                    [
+                        "redis-cli",
+                        "--raw",
+                        "-h",
+                        config["redis"]["host"],
+                        "-p",
+                        str(config["redis"]["port"]),
+                        "SETEX",
+                        keys[0],
+                        "30",
+                        "damaged-cache-value",
+                    ]
+                )
+                status, response = http_json(
+                    f"{base_url}/api/v1/logs/search",
+                    token="indexing-e2e-token",
+                    method="POST",
+                    body={
+                        "keywords": ["inspection", "ng"],
+                        "device_id": "AOI-VT-01",
+                        "offset": 0,
+                        "page_size": 10,
+                    },
+                )
+                assert status == 200 and response["data"] == first_search_data
                 doc_id = response["data"]["items"][0]["doc_id"]
                 assert response["data"]["items"][0]["error_code"] == "INSPECTION_NG"
                 status, response = http_json(
@@ -331,6 +426,45 @@ CREATE TABLE archive_file (
                 stop_process(api_search)
                 api_search_log.close()
                 api_gateway_log.close()
+
+            fallback_config = json.loads(json.dumps(config))
+            fallback_config["redis"]["port"] = allocate_port()
+            fallback_config["search_rpc"]["port"] = allocate_port()
+            fallback_config["gateway"]["rpc_port"] = fallback_config["search_rpc"]["port"]
+            fallback_config["gateway"]["port"] = allocate_port()
+            fallback_config_path = root / "fallback-logtrace.json"
+            fallback_config_path.write_text(
+                json.dumps(fallback_config, indent=2), encoding="utf-8"
+            )
+            fake_redis = PingOnlyRedis(fallback_config["redis"]["port"])
+            fake_redis.start()
+            fallback_search = subprocess.Popen(
+                [str(search_binary), "--config", str(fallback_config_path)], env=env,
+                stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+            )
+            fallback_gateway = None
+            try:
+                wait_for_port(fallback_config["search_rpc"]["port"], fallback_search)
+                fallback_gateway = subprocess.Popen(
+                    [str(gateway_binary), "--config", str(fallback_config_path)], env=env,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+                )
+                wait_for_port(fallback_config["gateway"]["port"], fallback_gateway)
+                fake_redis.stop()
+                status, response = http_json(
+                    f"http://127.0.0.1:{fallback_config['gateway']['port']}"
+                    "/api/v1/logs/search",
+                    token="indexing-e2e-token",
+                    method="POST",
+                    body={"keywords": ["inspection", "ng"], "device_id": "AOI-VT-01",
+                          "offset": 0, "page_size": 10},
+                )
+                assert status == 200 and response["data"]["total_hits"] == 1
+            finally:
+                if fallback_gateway is not None:
+                    stop_process(fallback_gateway)
+                stop_process(fallback_search)
+                fake_redis.stop()
 
             second = run(
                 [str(admin_binary), "--config", str(config_path), "scan-once"], env=env
@@ -481,6 +615,14 @@ CREATE TABLE archive_file (
             assert final_search.returncode == 0
             assert not temporary_build.exists()
         finally:
+            redis_keys = run(
+                ["redis-cli", "--raw", "-h", config["redis"]["host"], "-p",
+                 str(config["redis"]["port"]), "--scan", "--pattern",
+                 f"{config['redis']['key_prefix']}*"]
+            ).stdout.splitlines()
+            if redis_keys:
+                run(["redis-cli", "--raw", "-h", config["redis"]["host"], "-p",
+                     str(config["redis"]["port"]), "DEL"] + redis_keys)
             run(
                 mysql_command(config, "source_mysql")
                 + [f"--execute=DROP DATABASE IF EXISTS `{source_database}`"],

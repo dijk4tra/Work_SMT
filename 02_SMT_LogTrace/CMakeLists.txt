@@ -58,6 +58,7 @@ target_include_directories(logtrace_proto SYSTEM PUBLIC ${LOGTRACE_GENERATED_DIR
 target_link_libraries(logtrace_proto PUBLIC protobuf::libprotobuf ${SRPC_LIBRARY})
 
 set(LOGTRACE_CORE_SOURCES
+    src/cache/query_cache.cpp
     src/api/health_controller.cpp
     src/api/search_controller.cpp
     src/auth/operator_authenticator.cpp

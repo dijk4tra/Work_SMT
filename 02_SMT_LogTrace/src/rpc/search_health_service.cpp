@@ -9,6 +9,7 @@
 #include <workflow/MySQLUtil.h>
 #include <workflow/WFTaskFactory.h>
 
+#include <chrono>
 #include <exception>
 #include <memory>
 #include <string>
@@ -128,6 +129,80 @@ struct ErrorCodeState {
     std::string recommended_action;
 };
 
+std::int64_t nowMilliseconds() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+template <typename Response>
+void executeCachedSearch(const SearchQuery& query, const RedisClient& redis,
+                         const QueryCache& cache, const SearchEngine& engine, int timeout_ms,
+                         Response* response, SeriesWork* series) {
+    const std::uint64_t version = engine.snapshotVersion();
+    const std::string key = cache.key(query, version);
+    WFRedisTask* get = redis.createCommand(
+        "GET", std::vector<std::string>(1, key), timeout_ms,
+        [query, key, &redis, &cache, &engine, timeout_ms, response](WFRedisTask* task) {
+            protocol::RedisValue result;
+            if (task->get_state() == WFT_STATE_SUCCESS) task->get_resp()->get_result(result);
+            SearchPage page;
+            if (result.is_string() && cache.restore(result.string_value(), engine, &page)) {
+                fillPage(page, response);
+                return;
+            }
+            try {
+                page = engine.search(query);
+                fillPage(page, response);
+            } catch (const std::exception&) {
+                response->set_code("INDEX_CORRUPTED");
+                response->set_message("search index cannot complete the query");
+                return;
+            }
+            const std::string value = cache.serialize(page);
+            const int ttl = cache.ttlSeconds(query, page.total_hits == 0, nowMilliseconds());
+            WFRedisTask* set = redis.createCommand(
+                "SETEX", std::vector<std::string>{key, std::to_string(ttl), value}, timeout_ms,
+                [](WFRedisTask*) {});
+            series_of(task)->push_back(set);
+        });
+    series->push_back(get);
+}
+
+void executeCachedMatches(const SearchQuery& query, const RedisClient& redis,
+                          const QueryCache& cache, const SearchEngine& engine, int timeout_ms,
+                          rpc::GetErrorCodeResponse* response, SeriesWork* series) {
+    const std::string key = cache.key(query, engine.snapshotVersion());
+    WFRedisTask* get = redis.createCommand(
+        "GET", std::vector<std::string>(1, key), timeout_ms,
+        [query, key, &redis, &cache, &engine, timeout_ms, response](WFRedisTask* task) {
+            protocol::RedisValue result;
+            if (task->get_state() == WFT_STATE_SUCCESS) task->get_resp()->get_result(result);
+            SearchPage page;
+            const bool hit =
+                result.is_string() && cache.restore(result.string_value(), engine, &page);
+            if (!hit) {
+                try {
+                    page = engine.search(query);
+                } catch (const std::exception&) {
+                    response->Clear();
+                    response->set_code("INDEX_CORRUPTED");
+                    response->set_message("search index cannot complete the query");
+                    return;
+                }
+                const int ttl = cache.ttlSeconds(query, page.total_hits == 0, nowMilliseconds());
+                series_of(task)->push_back(redis.createCommand(
+                    "SETEX",
+                    std::vector<std::string>{key, std::to_string(ttl), cache.serialize(page)},
+                    timeout_ms, [](WFRedisTask*) {}));
+            }
+            for (std::vector<SearchHit>::const_iterator item = page.items.begin();
+                 item != page.items.end(); ++item)
+                fillSummary(*item, response->add_matching_logs());
+        });
+    series->push_back(get);
+}
+
 }  // namespace
 
 SearchHealthService::SearchHealthService(const SearchHealthDependencies& dependencies,
@@ -137,6 +212,9 @@ SearchHealthService::SearchHealthService(const SearchHealthDependencies& depende
       redis_(dependencies.redis),
       storage_(dependencies.storage),
       search_engine_(dependencies.search_engine),
+      query_cache_(dependencies.redis_config, dependencies.cache_config),
+      error_code_cache_(dependencies.cache_config.probation_capacity,
+                        dependencies.cache_config.protected_capacity),
       timeout_ms_(timeout_ms) {}
 
 void SearchHealthService::Health(rpc::HealthRequest* request, rpc::HealthResponse* response,
@@ -190,12 +268,8 @@ void SearchHealthService::SearchLogs(rpc::SearchLogsRequest* request,
     SearchQuery query =
         makeQuery(request->filter(), request->offset(), request->page_size(), false);
     query.keywords.assign(request->keywords().begin(), request->keywords().end());
-    try {
-        fillPage(search_engine_.search(query), response);
-    } catch (const std::exception&) {
-        response->set_code("INDEX_CORRUPTED");
-        response->set_message("search index cannot complete the query");
-    }
+    executeCachedSearch(query, redis_, query_cache_, search_engine_, timeout_ms_, response,
+                        context->get_series());
 }
 
 void SearchHealthService::ListAnomalies(rpc::ListAnomaliesRequest* request,
@@ -208,14 +282,9 @@ void SearchHealthService::ListAnomalies(rpc::ListAnomaliesRequest* request,
         response->set_message("anomaly pagination is invalid");
         return;
     }
-    try {
-        fillPage(search_engine_.search(
-                     makeQuery(request->filter(), request->offset(), request->page_size(), true)),
-                 response);
-    } catch (const std::exception&) {
-        response->set_code("INDEX_CORRUPTED");
-        response->set_message("search index cannot complete the query");
-    }
+    executeCachedSearch(makeQuery(request->filter(), request->offset(), request->page_size(), true),
+                        redis_, query_cache_, search_engine_, timeout_ms_, response,
+                        context->get_series());
 }
 
 void SearchHealthService::GetLogDetail(rpc::GetLogDetailRequest* request,
@@ -254,6 +323,21 @@ void SearchHealthService::GetErrorCode(rpc::GetErrorCodeRequest* request,
         response->set_message("error_code is invalid");
         return;
     }
+    ErrorCodeKnowledge cached;
+    if (error_code_cache_.get(request->error_code(), &cached)) {
+        response->set_code("OK");
+        response->set_message("success");
+        response->set_error_code(request->error_code());
+        response->set_module_name(cached.module_name);
+        response->set_title(cached.title);
+        response->set_description(cached.description);
+        response->set_recommended_action(cached.recommended_action);
+        SearchQuery search = makeQuery(rpc::SearchFilter(), 0, 5, false);
+        search.error_code = request->error_code();
+        executeCachedMatches(search, redis_, query_cache_, search_engine_, timeout_ms_, response,
+                             context->get_series());
+        return;
+    }
     const std::shared_ptr<ErrorCodeState> state(new ErrorCodeState{false, false, "", "", "", ""});
     const std::string escaped =
         protocol::MySQLUtil::escape_string_quote(request->error_code(), '\'');
@@ -282,8 +366,8 @@ void SearchHealthService::GetErrorCode(rpc::GetErrorCodeRequest* request,
     // Series 尾任务执行时 request 已不能作为寿命保证，因此必须拷贝。
     // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
     std::string error_code = request->error_code();
-    WFTimerTask* finish =
-        WFTaskFactory::create_timer_task(0, 0, [this, state, error_code, response](WFTimerTask*) {
+    WFTimerTask* finish = WFTaskFactory::create_timer_task(
+        0, 0, [this, state, error_code, response](WFTimerTask* timer) {
             if (!state->available) {
                 response->set_code("MYSQL_UNAVAILABLE");
                 response->set_message("error code catalog is unavailable");
@@ -301,19 +385,13 @@ void SearchHealthService::GetErrorCode(rpc::GetErrorCodeRequest* request,
             response->set_title(state->title);
             response->set_description(state->description);
             response->set_recommended_action(state->recommended_action);
+            error_code_cache_.put(
+                error_code, ErrorCodeKnowledge{state->module_name, state->title, state->description,
+                                               state->recommended_action});
             SearchQuery search = makeQuery(rpc::SearchFilter(), 0, 5, false);
             search.error_code = error_code;
-            try {
-                const SearchPage page = search_engine_.search(search);
-                for (std::vector<SearchHit>::const_iterator hit = page.items.begin();
-                     hit != page.items.end(); ++hit) {
-                    fillSummary(*hit, response->add_matching_logs());
-                }
-            } catch (const std::exception&) {
-                response->Clear();
-                response->set_code("INDEX_CORRUPTED");
-                response->set_message("search index cannot complete the query");
-            }
+            executeCachedMatches(search, redis_, query_cache_, search_engine_, timeout_ms_,
+                                 response, series_of(timer));
         });
     context->get_series()->push_back(query);
     context->get_series()->push_back(finish);
