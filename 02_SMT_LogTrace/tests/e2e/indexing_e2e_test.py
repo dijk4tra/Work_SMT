@@ -155,7 +155,6 @@ def query(config, section, database, sql):
 
 
 def main():
-    os.environ.setdefault("SMT_LOGTRACE_OPERATOR_TOKEN", "indexing-e2e-token")
     if len(sys.argv) != 6:
         raise SystemExit(
             "usage: indexing_e2e_test.py <admin-binary> <search-binary> "
@@ -237,6 +236,7 @@ CREATE TABLE archive_file (
                 input_text=source_schema,
             )
             env = os.environ.copy()
+            env["SMT_LOGTRACE_OPERATOR_TOKEN"] = "indexing-e2e-token"
             run([str(db_script), "migrate", "--config", str(config_path)], env=env)
             run([str(db_script), "seed", "--config", str(config_path)], env=env)
             run([sys.executable, str(generator), "--output", str(root / "samples")])

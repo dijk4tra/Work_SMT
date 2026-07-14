@@ -14,3 +14,4 @@ __pycache__/
 *.tmp
 .env
 *.env.local
+conf/datastream.env
