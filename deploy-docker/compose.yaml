@@ -1,0 +1,369 @@
+name: ${COMPOSE_PROJECT_NAME:-smt-pilot}
+
+x-app-security: &app-security
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges=true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m
+  pids_limit: 256
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
+
+x-app-secrets: &app-secrets
+  SMT_DATASTREAM_MYSQL_PASSWORD_FILE: /run/secrets/datastream_mysql_password
+  SMT_DATASTREAM_REDIS_PASSWORD_FILE: /run/secrets/redis_password
+  SMT_DATASTREAM_OPERATOR_TOKEN_FILE: /run/secrets/datastream_operator_token
+  SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD_FILE: /run/secrets/logtrace_source_mysql_password
+  SMT_LOGTRACE_STATE_MYSQL_PASSWORD_FILE: /run/secrets/logtrace_state_mysql_password
+  SMT_LOGTRACE_REDIS_PASSWORD_FILE: /run/secrets/redis_password
+  SMT_LOGTRACE_OPERATOR_TOKEN_FILE: /run/secrets/logtrace_operator_token
+
+services:
+  mysql:
+    image: mysql:8.0.45
+    command:
+      - mysqld
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-expire-logs-seconds=604800
+      - --sync-binlog=1
+      - --innodb-flush-log-at-trx-commit=1
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+    secrets:
+      - mysql_root_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "--host=127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 60s
+    networks:
+      - backend
+
+  redis:
+    image: redis:7.2.10-bookworm
+    user: "999:999"
+    entrypoint: ["/opt/smt/redis-entrypoint.sh"]
+    environment:
+      SMT_REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    secrets:
+      - redis_password
+    configs:
+      - source: redis_entrypoint
+        target: /opt/smt/redis-entrypoint.sh
+        mode: 0555
+      - source: redis_config
+        target: /opt/smt/redis.conf.template
+        mode: 0444
+    volumes:
+      - redis_data:/data
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges=true
+    tmpfs:
+      - /run/redis:rw,noexec,nosuid,nodev,uid=999,gid=999,mode=0700,size=1m
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 30s
+    networks:
+      - backend
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy-docker/ops/Dockerfile
+    image: smt-ops:${SMT_RELEASE_VERSION:-dev}
+    environment:
+      <<: *app-secrets
+      SMT_SECRET_VARS: >-
+        SMT_MYSQL_ROOT_PASSWORD SMT_MYSQL_MIGRATOR_PASSWORD
+        SMT_DATASTREAM_MYSQL_PASSWORD SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD
+        SMT_LOGTRACE_STATE_MYSQL_PASSWORD
+      SMT_MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      SMT_MYSQL_MIGRATOR_PASSWORD_FILE: /run/secrets/mysql_migrator_password
+      SMT_APPLY_DEV_SEED: ${SMT_APPLY_DEV_SEED:-1}
+    secrets:
+      - mysql_root_password
+      - mysql_migrator_password
+      - datastream_mysql_password
+      - logtrace_source_mysql_password
+      - logtrace_state_mysql_password
+    command: ["/usr/local/bin/migrate-all.sh"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - backend
+
+  datastream:
+    build:
+      context: ..
+      dockerfile: deploy-docker/datastream/Dockerfile
+      target: runtime
+    image: smt-datastream:${SMT_RELEASE_VERSION:-dev}
+    <<: *app-security
+    environment:
+      <<: *app-secrets
+      SMT_SECRET_VARS: >-
+        SMT_DATASTREAM_MYSQL_PASSWORD SMT_DATASTREAM_REDIS_PASSWORD
+        SMT_DATASTREAM_OPERATOR_TOKEN
+    secrets:
+      - datastream_mysql_password
+      - datastream_operator_token
+      - redis_password
+    volumes:
+      - datastream_data:/data
+      - datastream_logs:/var/log/smt-datastream
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "5", "http://127.0.0.1:8080/health/ready"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 35s
+    cpus: ${SMT_DATASTREAM_CPUS:-2.0}
+    mem_limit: ${SMT_DATASTREAM_MEMORY:-2g}
+    networks:
+      - backend
+
+  logsearch:
+    build:
+      context: ..
+      dockerfile: deploy-docker/logtrace/Dockerfile
+      target: runtime
+    image: smt-logtrace:${SMT_RELEASE_VERSION:-dev}
+    <<: *app-security
+    group_add:
+      - "10000"
+    command: ["/usr/local/bin/logsearch_server", "--config", "/etc/smt/logtrace.json"]
+    environment:
+      <<: *app-secrets
+      SMT_SECRET_VARS: >-
+        SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD SMT_LOGTRACE_STATE_MYSQL_PASSWORD
+        SMT_LOGTRACE_REDIS_PASSWORD SMT_LOGTRACE_OPERATOR_TOKEN
+    secrets:
+      - logtrace_source_mysql_password
+      - logtrace_state_mysql_password
+      - logtrace_operator_token
+      - redis_password
+    volumes:
+      - datastream_data:/source:ro
+      - logtrace_index:/index
+      - logtrace_logs:/var/log/smt-logtrace
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/1413'"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 35s
+    cpus: ${SMT_LOGSEARCH_CPUS:-3.0}
+    mem_limit: ${SMT_LOGSEARCH_MEMORY:-4g}
+    networks:
+      - backend
+
+  logtrace-gateway:
+    build:
+      context: ..
+      dockerfile: deploy-docker/logtrace/Dockerfile
+      target: runtime
+    image: smt-logtrace:${SMT_RELEASE_VERSION:-dev}
+    <<: *app-security
+    command: ["/usr/local/bin/logtrace_gateway", "--config", "/etc/smt/logtrace.json"]
+    environment:
+      <<: *app-secrets
+      SMT_SECRET_VARS: >-
+        SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD SMT_LOGTRACE_STATE_MYSQL_PASSWORD
+        SMT_LOGTRACE_REDIS_PASSWORD SMT_LOGTRACE_OPERATOR_TOKEN
+    secrets:
+      - logtrace_source_mysql_password
+      - logtrace_state_mysql_password
+      - logtrace_operator_token
+      - redis_password
+    volumes:
+      - logtrace_logs:/var/log/smt-logtrace
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "5", "http://127.0.0.1:8081/health/ready"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      logsearch:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 20s
+    cpus: ${SMT_GATEWAY_CPUS:-1.0}
+    mem_limit: ${SMT_GATEWAY_MEMORY:-512m}
+    networks:
+      - backend
+
+  nginx:
+    image: nginx:1.28.0-alpine
+    user: "101:101"
+    entrypoint: ["nginx", "-g", "daemon off;"]
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges=true
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+        mode: 0444
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,uid=101,gid=101,size=32m
+    ports:
+      - "127.0.0.1:${SMT_DATASTREAM_PORT:-9090}:8080"
+      - "127.0.0.1:${SMT_LOGTRACE_PORT:-9091}:8081"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      datastream:
+        condition: service_healthy
+      logtrace-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - backend
+      - edge
+
+  backup:
+    profiles: ["ops"]
+    build:
+      context: ..
+      dockerfile: deploy-docker/ops/Dockerfile
+    image: smt-ops:${SMT_RELEASE_VERSION:-dev}
+    environment:
+      SMT_SECRET_VARS: SMT_MYSQL_ROOT_PASSWORD SMT_MYSQL_MIGRATOR_PASSWORD
+      SMT_MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      SMT_MYSQL_MIGRATOR_PASSWORD_FILE: /run/secrets/mysql_migrator_password
+      SMT_RELEASE_VERSION: ${SMT_RELEASE_VERSION:-dev}
+    secrets:
+      - mysql_root_password
+      - mysql_migrator_password
+    volumes:
+      - datastream_data:/data:ro
+      - logtrace_index:/index:ro
+      - ${SMT_BACKUP_ROOT:-./backups}:/backup
+    command: ["/usr/local/bin/backup-all.sh"]
+    networks:
+      - backend
+
+  restore:
+    profiles: ["ops"]
+    build:
+      context: ..
+      dockerfile: deploy-docker/ops/Dockerfile
+    image: smt-ops:${SMT_RELEASE_VERSION:-dev}
+    environment:
+      SMT_SECRET_VARS: SMT_MYSQL_ROOT_PASSWORD SMT_REDIS_PASSWORD
+      SMT_MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      SMT_REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      SMT_RESTORE_CONFIRM: ${SMT_RESTORE_CONFIRM:-not-confirmed}
+    secrets:
+      - mysql_root_password
+      - redis_password
+    volumes:
+      - datastream_data:/data
+      - logtrace_index:/index
+      - ${SMT_BACKUP_ROOT:-./backups}:/backup:ro
+    command: ["/usr/local/bin/restore-all.sh"]
+    networks:
+      - backend
+
+  integrity:
+    profiles: ["ops"]
+    build:
+      context: ..
+      dockerfile: deploy-docker/ops/Dockerfile
+    image: smt-ops:${SMT_RELEASE_VERSION:-dev}
+    environment:
+      SMT_SECRET_VARS: SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD SMT_LOGTRACE_STATE_MYSQL_PASSWORD
+      SMT_LOGTRACE_SOURCE_MYSQL_PASSWORD_FILE: /run/secrets/logtrace_source_mysql_password
+      SMT_LOGTRACE_STATE_MYSQL_PASSWORD_FILE: /run/secrets/logtrace_state_mysql_password
+    secrets:
+      - logtrace_source_mysql_password
+      - logtrace_state_mysql_password
+    volumes:
+      - datastream_data:/data:ro
+      - logtrace_index:/index:ro
+    command: ["/usr/local/bin/integrity-check.sh", "--metadata"]
+    networks:
+      - backend
+
+configs:
+  nginx_config:
+    file: ./nginx/nginx.conf
+  redis_entrypoint:
+    file: ./redis/entrypoint.sh
+  redis_config:
+    file: ./redis/redis.conf.template
+
+secrets:
+  mysql_root_password:
+    file: ${SMT_SECRET_DIR:-./secrets/example}/mysql_root_password.txt
+  mysql_migrator_password:
+    file: ${SMT_SECRET_DIR:-./secrets/example}/mysql_migrator_password.txt
+  datastream_mysql_password:
+    file: ${SMT_SECRET_DIR:-./secrets/example}/datastream_mysql_password.txt
+  datastream_operator_token:
+    file: ${SMT_SECRET_DIR:-./secrets/example}/datastream_operator_token.txt
+  logtrace_source_mysql_password:
+    file: ${SMT_SECRET_DIR:-./secrets/example}/logtrace_source_mysql_password.txt
+  logtrace_state_mysql_password:
+    file: ${SMT_SECRET_DIR:-./secrets/example}/logtrace_state_mysql_password.txt
+  logtrace_operator_token:
+    file: ${SMT_SECRET_DIR:-./secrets/example}/logtrace_operator_token.txt
+  redis_password:
+    file: ${SMT_SECRET_DIR:-./secrets/example}/redis_password.txt
+
+volumes:
+  mysql_data:
+  redis_data:
+  datastream_data:
+  datastream_logs:
+  logtrace_index:
+  logtrace_logs:
+
+networks:
+  backend:
+    internal: true
+  edge:

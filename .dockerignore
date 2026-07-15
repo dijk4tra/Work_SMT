@@ -1,0 +1,12 @@
+.git
+.agents
+.codex
+**/build
+**/build-*
+**/cmake-build-*
+**/.cache
+**/logs/*.log
+01_SMT_DataStream/data
+02_SMT_LogTrace/data
+deploy-docker/backups
+deploy-docker/secrets

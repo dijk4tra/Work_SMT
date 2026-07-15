@@ -307,6 +307,10 @@ scripts/acceptance.sh
 spool 位于 `/var/lib`。详细安装、权限、迁移、备份恢复和升级回滚步骤见
 [部署与运维手册](docs/17_部署与运维手册.md)。
 
+仓库根目录 `deploy-docker/` 另提供与 LogTrace 统一的服务端容器化联调环境，保持临时区和归档区
+同卷、Secret 文件注入及 LogTrace 只读归档挂载。实际边界和跨项目一致恢复步骤见根目录
+`SMT双项目Docker与单实例可靠性实际改进方案.md`；Collector 仍按现场 IPC 条件优先使用 systemd。
+
 固定故障演练包含 MySQL/Redis 短暂不可用、磁盘低水位、DataStream/Collector 强退、Redis 会话
 丢失和重复完成，见 [故障演练与排查](docs/18_故障演练与排查.md)。
 

@@ -1,0 +1,12 @@
+bind 0.0.0.0
+protected-mode yes
+port 6379
+dir /data
+
+appendonly yes
+appendfsync everysec
+aof-use-rdb-preamble yes
+save 900 1
+save 300 10
+
+maxmemory-policy noeviction

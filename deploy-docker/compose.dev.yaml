@@ -1,0 +1,7 @@
+services:
+  mysql:
+    ports:
+      - "127.0.0.1:${SMT_MYSQL_PORT:-3306}:3306"
+  redis:
+    ports:
+      - "127.0.0.1:${SMT_REDIS_PORT:-6379}:6379"

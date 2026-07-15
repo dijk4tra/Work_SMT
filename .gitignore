@@ -32,6 +32,11 @@ SMT产线项目.md
 .codex
 .agents
 .env
+deploy-docker/secrets/
+!deploy-docker/secrets/
+!deploy-docker/secrets/example/
+!deploy-docker/secrets/example/*.txt
+deploy-docker/backups/
 tmp/
 .cache/
 bin/
