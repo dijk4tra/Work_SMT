@@ -4,12 +4,14 @@
 import json
 import os
 import socket
+import statistics
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -76,6 +78,37 @@ def http_search(port, token):
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def percentile(values, percent):
+    ordered = sorted(values)
+    rank = max(0, (len(ordered) * percent + 99) // 100 - 1)
+    return ordered[rank]
+
+
+def run_http_load(port, token, request_count, concurrency):
+    def execute(_):
+        started = time.perf_counter()
+        response = http_search(port, token)
+        data = response["data"]
+        if data["total_hits"] != 1 or data["items"][0]["error_code"] != "INSPECTION_NG":
+            raise RuntimeError(f"unexpected load response: {response}")
+        return (time.perf_counter() - started) * 1000
+
+    started = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        latencies = list(executor.map(execute, range(request_count)))
+    duration = time.perf_counter() - started
+    return {
+        "requests": request_count,
+        "concurrency": concurrency,
+        "duration_seconds": round(duration, 3),
+        "requests_per_second": round(request_count / duration, 2),
+        "latency_ms_mean": round(statistics.mean(latencies), 2),
+        "latency_ms_p50": round(percentile(latencies, 50), 2),
+        "latency_ms_p95": round(percentile(latencies, 95), 2),
+        "failures": 0,
+    }
 
 
 def main():
@@ -207,9 +240,20 @@ def main():
             data = response["data"]
             if data["total_hits"] != 1 or data["items"][0]["error_code"] != "INSPECTION_NG":
                 raise RuntimeError(f"unexpected HTTP search result: {response}")
-            print(json.dumps({"archive_count": 1, "document_count": 1,
-                              "snapshot_version": data["snapshot_version"],
-                              "http_hits": data["total_hits"]}))
+            summary = {"archive_count": 1, "document_count": 1,
+                       "snapshot_version": data["snapshot_version"],
+                       "http_hits": data["total_hits"]}
+            load_requests = int(environment.get("SMT_CROSS_E2E_LOAD_REQUESTS", "0"))
+            load_concurrency = int(environment.get("SMT_CROSS_E2E_LOAD_CONCURRENCY", "8"))
+            if load_requests < 0 or load_concurrency < 1:
+                raise RuntimeError("cross-project load settings are invalid")
+            if load_requests > 0:
+                summary["http_load"] = run_http_load(
+                    logtrace_config["gateway"]["port"],
+                    environment["SMT_LOGTRACE_OPERATOR_TOKEN"],
+                    load_requests,
+                    load_concurrency)
+            print(json.dumps(summary))
         finally:
             stop(gateway_process)
             stop(search)
